@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatMoney, statusLabel } from '@/lib/utils'
+import { formatMoney, statusLabel, dueDateUrgency, daysUntilDue } from '@/lib/utils'
 import Link from 'next/link'
 import { PlusCircle, Pencil, Trash2 } from 'lucide-react'
 import { DeleteButton } from './DeleteButton'
@@ -148,6 +148,7 @@ export default async function TransactionsPage({
                 {hasTC && <th className="px-4 py-3 text-right">Monto USD</th>}
                 <th className="px-4 py-3 text-center">Tipo</th>
                 <th className="px-4 py-3 text-center">Estado</th>
+                <th className="px-4 py-3 text-center">Vencimiento</th>
                 <th className="px-4 py-3 text-center">Acciones</th>
               </tr>
             </thead>
@@ -182,6 +183,25 @@ export default async function TransactionsPage({
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">
+                    {t.status === 'devengado' && t.due_date ? (() => {
+                      const urgency = dueDateUrgency(t.due_date)
+                      const days = daysUntilDue(t.due_date)
+                      const colorClass = urgency === 'overdue' ? 'bg-red-100 text-red-700'
+                        : urgency === 'soon' ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-green-100 text-green-700'
+                      const label = days < 0 ? `${Math.abs(days)}d atraso` : days === 0 ? 'Hoy' : `${days}d`
+                      return (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>
+                          {t.due_date.slice(5)} · {label}
+                        </span>
+                      )
+                    })() : t.status === 'devengado' ? (
+                      <span className="text-xs text-gray-400">Sin fecha</span>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <Link
                         href={`/transactions/${t.id}/edit`}
@@ -197,7 +217,7 @@ export default async function TransactionsPage({
               ))}
               {(!transactions || transactions.length === 0) && (
                 <tr>
-                  <td colSpan={hasTC ? 9 : 8} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={hasTC ? 10 : 9} className="px-4 py-12 text-center text-gray-400">
                     No hay transacciones registradas
                   </td>
                 </tr>

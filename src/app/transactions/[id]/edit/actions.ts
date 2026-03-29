@@ -21,6 +21,8 @@ export async function updateTransaction(id: number, formData: FormData) {
       status: (formData.get('status') as string) || 'percibido',
       expense_type: type_ === 'expense' ? (formData.get('expense_type') as string) || 'ordinario' : null,
       notes: (formData.get('notes') as string)?.trim() || null,
+      due_date: (formData.get('due_date') as string) || null,
+      paid_date: (formData.get('status') as string) === 'percibido' ? new Date().toISOString().slice(0, 10) : null,
     })
     .eq('id', id)
 

@@ -15,6 +15,7 @@ interface Props {
 
 export function EditTransactionForm({ transaction, categories, accounts, businesses }: Props) {
   const [type, setType] = useState<'income' | 'expense'>(transaction.type)
+  const [status, setStatus] = useState<'percibido' | 'devengado'>(transaction.status)
   const filteredCategories = categories.filter(c => c.type === type)
 
   // Bind action with transaction id
@@ -114,7 +115,7 @@ export function EditTransactionForm({ transaction, categories, accounts, busines
             Estado <span className="text-red-500">*</span>
           </label>
           <select name="status" required className="w-full border rounded-lg px-3 py-2 text-sm"
-                  defaultValue={transaction.status}>
+                  value={status} onChange={(e) => setStatus(e.target.value as 'percibido' | 'devengado')}>
             <option value="percibido">Cobrado / Pagado</option>
             <option value="devengado">Pendiente</option>
           </select>
@@ -131,6 +132,18 @@ export function EditTransactionForm({ transaction, categories, accounts, busines
           </select>
         </div>
       </div>
+
+      {/* Fecha de vencimiento (solo para pendientes) */}
+      {status === 'devengado' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Fecha de vencimiento <span className="text-gray-400 text-xs">(opcional)</span>
+          </label>
+          <input type="date" name="due_date"
+                 defaultValue={transaction.due_date ?? ''}
+                 className="w-full border rounded-lg px-3 py-2 text-sm" />
+        </div>
+      )}
 
       {/* Notas */}
       <div>

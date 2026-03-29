@@ -14,6 +14,8 @@ export interface Transaction {
   exchange_rate: number | null
   expense_type: 'ordinario' | 'extraordinario' | null
   status: 'percibido' | 'devengado'
+  due_date: string | null
+  paid_date: string | null
   created_at: string
 }
 

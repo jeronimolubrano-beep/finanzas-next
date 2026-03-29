@@ -1,7 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { KPICard } from '@/components/KPICard'
 import { DashboardCharts } from './DashboardCharts'
-import { formatMoney, formatMoney0, getCurrentYear } from '@/lib/utils'
+import { formatMoney, formatMoney0, getCurrentYear, daysUntilDue } from '@/lib/utils'
+import Link from 'next/link'
+import { AlertTriangle, Clock } from 'lucide-react'
 
 export default async function DashboardPage({
   searchParams,
@@ -117,6 +119,22 @@ export default async function DashboardPage({
     return (ars / tcRate).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   }
 
+  // Pagos pendientes para alertas (sin filtro de empresa ni período)
+  const { data: pendingTxs } = await supabase
+    .from('transactions')
+    .select('id, type, amount, due_date, currency, exchange_rate')
+    .eq('status', 'devengado')
+
+  const allPending = pendingTxs ?? []
+  const today = new Date().toISOString().slice(0, 10)
+  const overdueItems = allPending.filter(t => t.due_date && t.due_date < today)
+  const soonItems = allPending.filter(t =>
+    t.due_date && t.due_date >= today && daysUntilDue(t.due_date) <= 7
+  )
+
+  const totalCobrar = allPending.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
+  const totalPagar = allPending.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+
   // Empresas para filtro
   const { data: businesses } = await supabase.from('businesses').select('*').order('name')
 
@@ -153,6 +171,32 @@ export default async function DashboardPage({
         </form>
       </div>
 
+      {/* Alertas de pagos urgentes */}
+      {(overdueItems.length > 0 || soonItems.length > 0) && (
+        <div className="space-y-2 mb-6">
+          {overdueItems.length > 0 && (
+            <Link href="/transactions/pending"
+                  className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 hover:bg-red-100 transition">
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+              <span className="text-sm text-red-700 font-medium flex-1">
+                Tenés {overdueItems.length} pago{overdueItems.length > 1 ? 's' : ''} vencido{overdueItems.length > 1 ? 's' : ''}
+              </span>
+              <span className="text-xs text-red-500">Ver →</span>
+            </Link>
+          )}
+          {soonItems.length > 0 && (
+            <Link href="/transactions/pending"
+                  className="flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 hover:bg-yellow-100 transition">
+              <Clock className="w-4 h-4 text-yellow-600 shrink-0" />
+              <span className="text-sm text-yellow-700 font-medium flex-1">
+                Tenés {soonItems.length} pago{soonItems.length > 1 ? 's' : ''} que vence{soonItems.length > 1 ? 'n' : ''} esta semana
+              </span>
+              <span className="text-xs text-yellow-500">Ver →</span>
+            </Link>
+          )}
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
         <KPICard title="Ingresos" value={`$${formatMoney(income)}`} color="green"
@@ -172,25 +216,22 @@ export default async function DashboardPage({
                  usdValue={hasTC ? `${ytdNet >= 0 ? '+' : ''}$${toUSD(Math.abs(ytdNet))}` : undefined} />
       </div>
 
-      {/* TC del día */}
-      {hasTC && (
-        <div className="mb-6">
+      {/* TC del día + Pendientes */}
+      <div className={`grid gap-4 mb-6 ${hasTC ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        {hasTC && (
           <KPICard title={`TC ${tcType}`} value={`$${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
                    subtitle={`Actualizado: ${tcDate}`} color="blue" />
-        </div>
-      )}
+        )}
+        <KPICard title="Total a cobrar" value={`$${formatMoney(totalCobrar)}`}
+                 subtitle={`${allPending.filter(t => t.type === 'income').length} pendiente(s)`}
+                 color="yellow"
+                 usdValue={hasTC ? `$${toUSD(totalCobrar)}` : undefined} />
+        <KPICard title="Total a pagar" value={`$${formatMoney(totalPagar)}`}
+                 subtitle={`${allPending.filter(t => t.type === 'expense').length} pendiente(s)`}
+                 color="orange"
+                 usdValue={hasTC ? `$${toUSD(totalPagar)}` : undefined} />
+      </div>
 
-      {/* Cuentas a cobrar / pagar */}
-      {(ctasCobrar > 0 || ctasPagar > 0) && (
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <KPICard title="Cuentas a cobrar" value={`$${formatMoney(ctasCobrar)}`}
-                   subtitle="Ingresos pendientes de cobro" color="yellow"
-                   usdValue={hasTC ? `$${toUSD(ctasCobrar)}` : undefined} />
-          <KPICard title="Cuentas a pagar" value={`$${formatMoney(ctasPagar)}`}
-                   subtitle="Gastos pendientes de pago" color="orange"
-                   usdValue={hasTC ? `$${toUSD(ctasPagar)}` : undefined} />
-        </div>
-      )}
 
       {/* Gráficos */}
       <DashboardCharts monthlyData={monthlyData} categoryData={categoryData} />

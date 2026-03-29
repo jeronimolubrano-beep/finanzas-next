@@ -15,6 +15,7 @@ interface Props {
 
 export function TransactionForm({ categories, accounts, businesses, today }: Props) {
   const [type, setType] = useState<'income' | 'expense'>('expense')
+  const [status, setStatus] = useState<'percibido' | 'devengado'>('percibido')
   const [currency, setCurrency] = useState<'ARS' | 'USD'>('ARS')
   const [tcRate, setTcRate] = useState<number | null>(null)
 
@@ -152,7 +153,8 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Estado <span className="text-red-500">*</span>
           </label>
-          <select name="status" required className="w-full border rounded-lg px-3 py-2 text-sm">
+          <select name="status" required className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={status} onChange={(e) => setStatus(e.target.value as 'percibido' | 'devengado')}>
             <option value="percibido">Cobrado / Pagado</option>
             <option value="devengado">Pendiente</option>
           </select>
@@ -168,6 +170,17 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
           </select>
         </div>
       </div>
+
+      {/* Fecha de vencimiento (solo para pendientes) */}
+      {status === 'devengado' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Fecha de vencimiento <span className="text-gray-400 text-xs">(opcional)</span>
+          </label>
+          <input type="date" name="due_date"
+                 className="w-full border rounded-lg px-3 py-2 text-sm" />
+        </div>
+      )}
 
       {/* Notas */}
       <div>

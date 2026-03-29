@@ -22,6 +22,7 @@ export async function addTransaction(formData: FormData) {
     notes: (formData.get('notes') as string)?.trim() || null,
     currency: (formData.get('currency') as string) || 'ARS',
     exchange_rate: formData.get('exchange_rate') ? parseFloat(formData.get('exchange_rate') as string) : null,
+    due_date: (formData.get('due_date') as string) || null,
   })
 
   if (error) {
