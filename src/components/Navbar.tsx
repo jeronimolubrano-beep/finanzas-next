@@ -5,10 +5,19 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, ArrowLeftRight, PlusCircle, List,
-  BarChart3, FileText, Settings, Tag, DollarSign, Menu, X, Camera
+  BarChart3, FileText, Settings, Tag, DollarSign, Menu, X, Camera,
+  type LucideIcon
 } from 'lucide-react'
 
-const navItems = [
+type NavLink = { href: string; label: string; icon: LucideIcon }
+type NavDropdown = { label: string; icon: LucideIcon; children: NavLink[] }
+type NavItem = NavLink | NavDropdown
+
+function isLink(item: NavItem): item is NavLink {
+  return 'href' in item
+}
+
+const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   {
     label: 'Transacciones',
@@ -55,7 +64,7 @@ export function Navbar() {
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-1">
             {navItems.map((item) =>
-              'href' in item ? (
+              isLink(item) ? (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -117,7 +126,7 @@ export function Navbar() {
         {mobileOpen && (
           <div className="md:hidden pb-4 space-y-1">
             {navItems.map((item) =>
-              'href' in item ? (
+              isLink(item) ? (
                 <Link
                   key={item.href}
                   href={item.href}
