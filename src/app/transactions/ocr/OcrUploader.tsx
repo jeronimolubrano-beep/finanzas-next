@@ -10,6 +10,9 @@ interface OcrResult {
   description: string
   amount: string
   type: 'income' | 'expense'
+  category: string | null
+  expense_type: string | null
+  account: string | null
 }
 
 interface Props {
@@ -27,16 +30,30 @@ export function OcrUploader({ categories, accounts, businesses }: Props) {
 
   const filteredCategories = categories.filter(c => c.type === type)
 
+  // Buscar el ID de categoria que mejor coincida con el nombre sugerido por OCR
+  function findCategoryId(suggestedName: string | null): string {
+    if (!suggestedName) return filteredCategories[0]?.id?.toString() || ''
+    const lower = suggestedName.toLowerCase()
+    const match = filteredCategories.find(c => c.name.toLowerCase().includes(lower) || lower.includes(c.name.toLowerCase()))
+    return match ? match.id.toString() : filteredCategories[0]?.id?.toString() || ''
+  }
+
+  // Buscar el ID de cuenta que mejor coincida
+  function findAccountId(suggestedName: string | null): string {
+    if (!suggestedName) return ''
+    const lower = suggestedName.toLowerCase()
+    const match = accounts.find(a => a.name.toLowerCase().includes(lower) || lower.includes(a.name.toLowerCase()))
+    return match ? match.id.toString() : ''
+  }
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Preview
     const reader = new FileReader()
     reader.onload = (ev) => setPreview(ev.target?.result as string)
     reader.readAsDataURL(file)
 
-    // Send to API
     setLoading(true)
     setError(null)
     setOcrData(null)
@@ -144,8 +161,16 @@ export function OcrUploader({ categories, accounts, businesses }: Props) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-              <select name="category_id" required className="w-full border rounded-lg px-3 py-2 text-sm">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Categoria
+                {ocrData.category && (
+                  <span className="ml-2 text-xs text-blue-500 font-normal">
+                    (sugerida: {ocrData.category})
+                  </span>
+                )}
+              </label>
+              <select name="category_id" required className="w-full border rounded-lg px-3 py-2 text-sm"
+                      defaultValue={findCategoryId(ocrData.category)}>
                 {filteredCategories.map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
@@ -153,8 +178,16 @@ export function OcrUploader({ categories, accounts, businesses }: Props) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Cuenta</label>
-              <select name="account_id" className="w-full border rounded-lg px-3 py-2 text-sm">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Cuenta
+                {ocrData.account && (
+                  <span className="ml-2 text-xs text-blue-500 font-normal">
+                    (sugerida: {ocrData.account})
+                  </span>
+                )}
+              </label>
+              <select name="account_id" className="w-full border rounded-lg px-3 py-2 text-sm"
+                      defaultValue={findAccountId(ocrData.account)}>
                 <option value="">Sin especificar</option>
                 {accounts.map(a => (
                   <option key={a.id} value={a.id}>{a.name}</option>
@@ -164,8 +197,16 @@ export function OcrUploader({ categories, accounts, businesses }: Props) {
 
             {type === 'expense' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de gasto</label>
-                <select name="expense_type" className="w-full border rounded-lg px-3 py-2 text-sm">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de gasto
+                  {ocrData.expense_type && (
+                    <span className="ml-2 text-xs text-blue-500 font-normal">
+                      (sugerido: {ocrData.expense_type})
+                    </span>
+                  )}
+                </label>
+                <select name="expense_type" className="w-full border rounded-lg px-3 py-2 text-sm"
+                        defaultValue={ocrData.expense_type || 'ordinario'}>
                   <option value="ordinario">Ordinario (recurrente)</option>
                   <option value="extraordinario">Extraordinario (puntual)</option>
                 </select>

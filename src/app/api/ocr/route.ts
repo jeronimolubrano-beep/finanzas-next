@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'ANTHROPIC_API_KEY no configurada' }, { status: 500 })
     }
 
-    // Llamar a la API de Anthropic directamente con fetch (sin SDK)
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -31,7 +30,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 500,
+        max_tokens: 800,
         messages: [
           {
             role: 'user',
@@ -46,21 +45,47 @@ export async function POST(request: NextRequest) {
               },
               {
                 type: 'text',
-                text: `Analiza esta imagen de un ticket, factura o recibo.
-Extrae la siguiente informacion y devolvela SOLO como JSON valido (sin markdown, sin explicaciones):
+                text: `Analiza esta imagen de un ticket, factura o recibo de un negocio familiar argentino.
+Extrae la informacion y clasifica inteligentemente. Devolvela SOLO como JSON valido (sin markdown):
 
 {
   "date": "YYYY-MM-DD",
-  "description": "descripcion breve del gasto o ingreso",
+  "description": "descripcion breve en espanol (max 100 chars)",
   "amount": "1234.56",
-  "type": "expense"
+  "type": "expense o income",
+  "category": "nombre de categoria sugerida",
+  "expense_type": "ordinario o extraordinario",
+  "account": "nombre de cuenta sugerida"
 }
 
+CATEGORIAS DISPONIBLES (elegir la mas apropiada):
+Ingresos: Sueldo, Freelance, Inversiones, Regalo, Otros ingresos
+Gastos: Alquiler/Hipoteca, Supermercado, Servicios, Transporte, Salud, Educacion, Entretenimiento, Otros gastos
+
+CUENTAS DISPONIBLES: Cuenta corriente, Caja de ahorro, Efectivo
+
+REGLAS DE CLASIFICACION:
+- Combustible, peajes, estacionamiento, taller mecanico, seguro auto → categoria "Transporte"
+- Supermercados, almacenes, verdulerias, carniceria → categoria "Supermercado"
+- Luz, gas, agua, telefono, internet, cable → categoria "Servicios"
+- Farmacias, clinicas, estudios medicos, prepagas → categoria "Salud"
+- Restaurantes, cine, streaming, salidas → categoria "Entretenimiento"
+- Colegios, universidades, cursos, libros → categoria "Educacion"
+- Alquileres, expensas, inmobiliaria → categoria "Alquiler/Hipoteca"
+
+TIPO DE GASTO (expense_type):
+- "ordinario": gastos recurrentes mensuales (supermercado, servicios, combustible habitual, sueldo empleados)
+- "extraordinario": gastos puntuales no recurrentes (reparaciones, compras grandes, emergencias, multas)
+
+CUENTA:
+- Si se pago con tarjeta de debito/credito o transferencia → "Cuenta corriente"
+- Si se pago en efectivo → "Efectivo"
+- Si no se puede determinar → "Cuenta corriente" (default)
+
 Notas:
-- date: si no se puede leer la fecha, usa la fecha de hoy
-- amount: numero positivo sin signo de moneda
-- type: "expense" para gastos/compras, "income" para ingresos/cobros
-- description: maximo 100 caracteres, en espanol`,
+- date: si no se puede leer la fecha, usa la de hoy
+- amount: numero positivo sin signo de moneda, sin puntos de miles (solo punto decimal)
+- type: "expense" para gastos/compras, "income" para cobros/ventas`,
               },
             ],
           },
@@ -95,6 +120,9 @@ Notas:
       description: ocrData.description || 'Sin descripcion',
       amount: ocrData.amount || '0',
       type: ocrData.type || 'expense',
+      category: ocrData.category || null,
+      expense_type: ocrData.expense_type || 'ordinario',
+      account: ocrData.account || null,
     })
   } catch (error) {
     console.error('OCR error:', error)
