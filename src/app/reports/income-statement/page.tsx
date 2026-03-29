@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { formatMoney0 } from '@/lib/utils'
+import { DollarSign } from 'lucide-react'
 
 export default async function IncomeStatementPage({
   searchParams,
@@ -28,6 +29,19 @@ export default async function IncomeStatementPage({
 
   // Empresas para filtro
   const { data: businesses } = await supabase.from('businesses').select('*').order('name')
+
+  // Tipo de cambio
+  const { data: settings } = await supabase.from('settings').select('*')
+  const settingsMap: Record<string, string> = {}
+  for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
+  const tcRate = parseFloat(settingsMap.current_rate) || 0
+  const tcDate = settingsMap.rate_date || ''
+  const tcType = settingsMap.rate_type || ''
+  const hasTC = tcRate > 0
+
+  function toUSD(ars: number): string {
+    return (ars / tcRate).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  }
 
   // Agrupar por mes
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -188,6 +202,35 @@ export default async function IncomeStatementPage({
           </p>
         </div>
       </div>
+
+      {/* Equivalente en USD */}
+      {hasTC && (
+        <div className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <DollarSign className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-semibold text-blue-700">Resumen anual en USD</span>
+            <span className="text-xs text-blue-400 ml-auto">
+              TC: ${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })} ({tcType}) al {tcDate}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <p className="text-xs text-blue-400">Ingresos {selectedYear}</p>
+              <p className="text-lg font-bold text-green-600">USD ${toUSD(totalIncome)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-blue-400">Gastos {selectedYear}</p>
+              <p className="text-lg font-bold text-red-500">USD ${toUSD(totalExpense)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-blue-400">Resultado Neto</p>
+              <p className={`text-lg font-bold ${totalNet >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                USD {totalNet >= 0 ? '+' : ''}${toUSD(Math.abs(totalNet))}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { formatMoney, statusLabel } from '@/lib/utils'
 import { KPICard } from '@/components/KPICard'
+import { DollarSign } from 'lucide-react'
 
 export default async function CashFlowPage({
   searchParams,
@@ -10,7 +11,6 @@ export default async function CashFlowPage({
   const params = await searchParams
   const supabase = await createClient()
 
-  // Mes seleccionado (default: mes actual)
   const now = new Date()
   const selectedMonth = params.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const [year, month] = selectedMonth.split('-')
@@ -21,7 +21,6 @@ export default async function CashFlowPage({
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
   const monthLabel = `${monthNames[parseInt(month) - 1]} ${year}`
 
-  // Query transacciones del mes
   let query = supabase
     .from('transactions')
     .select('*, categories(name)')
@@ -36,16 +35,24 @@ export default async function CashFlowPage({
   const { data: transactions } = await query
   const txs = transactions ?? []
 
-  // Empresas para filtro
   const { data: businesses } = await supabase.from('businesses').select('*').order('name')
 
-  // === PERCIBIDO (solo cobrado/pagado) ===
+  // Tipo de cambio
+  const { data: settings } = await supabase.from('settings').select('*')
+  const settingsMap: Record<string, string> = {}
+  for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
+  const tcRate = parseFloat(settingsMap.current_rate) || 0
+  const tcDate = settingsMap.rate_date || ''
+  const tcType = settingsMap.rate_type || ''
+  const hasTC = tcRate > 0
+
+  // === PERCIBIDO ===
   const percibido = txs.filter(t => t.status === 'percibido')
   const pIncome = percibido.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
   const pExpense = percibido.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
   const pNet = pIncome - pExpense
 
-  // === DEVENGADO (todas) ===
+  // === DEVENGADO ===
   const dIncome = txs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
   const dExpense = txs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
   const dNet = dIncome - dExpense
@@ -55,7 +62,7 @@ export default async function CashFlowPage({
   function groupByCategory(items: typeof txs, type: string): CatGroup[] {
     const map: Record<string, CatGroup> = {}
     for (const t of items.filter(t => t.type === type)) {
-      const name = (t.categories as { name: string } | null)?.name ?? 'Sin categoria'
+      const name = (t.categories as unknown as { name: string } | null)?.name ?? 'Sin categoria'
       if (!map[name]) map[name] = { name, total: 0 }
       map[name].total += Number(t.amount)
     }
@@ -64,6 +71,10 @@ export default async function CashFlowPage({
 
   const incomeByCategory = groupByCategory(txs, 'income')
   const expenseByCategory = groupByCategory(txs, 'expense')
+
+  function toUSD(ars: number): string {
+    return formatMoney(ars / tcRate)
+  }
 
   return (
     <div>
@@ -101,55 +112,104 @@ export default async function CashFlowPage({
                  color={dNet >= 0 ? 'cyan' : 'red'} />
       </div>
 
+      {/* Equivalente en USD */}
+      {hasTC && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-5 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <DollarSign className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-semibold text-blue-700">Equivalente en USD</span>
+            <span className="text-xs text-blue-400 ml-auto">
+              TC: ${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })} ({tcType}) al {tcDate}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <p className="text-xs text-blue-400">Ingresos</p>
+              <p className="text-lg font-bold text-green-600">USD ${toUSD(dIncome)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-blue-400">Gastos</p>
+              <p className="text-lg font-bold text-red-500">USD ${toUSD(dExpense)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-blue-400">Flujo neto</p>
+              <p className={`text-lg font-bold ${dNet >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                USD {dNet >= 0 ? '+' : ''}${toUSD(Math.abs(dNet))}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Desglose por categoria */}
       <div className="grid md:grid-cols-2 gap-6 mb-6">
-        {/* Ingresos */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <div className="px-4 py-3 bg-green-50 border-b">
             <h2 className="font-semibold text-green-700">Ingresos por categoria</h2>
           </div>
           <table className="w-full text-sm">
+            <thead className={hasTC ? 'bg-gray-50 text-gray-500 text-xs' : ''}>
+              {hasTC && (
+                <tr>
+                  <th className="px-4 py-1 text-left"></th>
+                  <th className="px-4 py-1 text-right">ARS</th>
+                  <th className="px-4 py-1 text-right">USD</th>
+                </tr>
+              )}
+            </thead>
             <tbody className="divide-y">
               {incomeByCategory.map(c => (
                 <tr key={c.name}>
                   <td className="px-4 py-2">{c.name}</td>
                   <td className="px-4 py-2 text-right font-semibold text-green-600">${formatMoney(c.total)}</td>
+                  {hasTC && <td className="px-4 py-2 text-right text-xs text-gray-400">${toUSD(c.total)}</td>}
                 </tr>
               ))}
               {incomeByCategory.length === 0 && (
-                <tr><td colSpan={2} className="px-4 py-4 text-center text-gray-400">Sin ingresos</td></tr>
+                <tr><td colSpan={hasTC ? 3 : 2} className="px-4 py-4 text-center text-gray-400">Sin ingresos</td></tr>
               )}
             </tbody>
             <tfoot className="border-t bg-gray-50">
               <tr>
                 <td className="px-4 py-2 font-bold">Total</td>
                 <td className="px-4 py-2 text-right font-bold text-green-600">${formatMoney(dIncome)}</td>
+                {hasTC && <td className="px-4 py-2 text-right font-bold text-xs text-gray-500">${toUSD(dIncome)}</td>}
               </tr>
             </tfoot>
           </table>
         </div>
 
-        {/* Gastos */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <div className="px-4 py-3 bg-red-50 border-b">
             <h2 className="font-semibold text-red-700">Gastos por categoria</h2>
           </div>
           <table className="w-full text-sm">
+            <thead className={hasTC ? 'bg-gray-50 text-gray-500 text-xs' : ''}>
+              {hasTC && (
+                <tr>
+                  <th className="px-4 py-1 text-left"></th>
+                  <th className="px-4 py-1 text-right">ARS</th>
+                  <th className="px-4 py-1 text-right">USD</th>
+                </tr>
+              )}
+            </thead>
             <tbody className="divide-y">
               {expenseByCategory.map(c => (
                 <tr key={c.name}>
                   <td className="px-4 py-2">{c.name}</td>
                   <td className="px-4 py-2 text-right font-semibold text-red-600">${formatMoney(c.total)}</td>
+                  {hasTC && <td className="px-4 py-2 text-right text-xs text-gray-400">${toUSD(c.total)}</td>}
                 </tr>
               ))}
               {expenseByCategory.length === 0 && (
-                <tr><td colSpan={2} className="px-4 py-4 text-center text-gray-400">Sin gastos</td></tr>
+                <tr><td colSpan={hasTC ? 3 : 2} className="px-4 py-4 text-center text-gray-400">Sin gastos</td></tr>
               )}
             </tbody>
             <tfoot className="border-t bg-gray-50">
               <tr>
                 <td className="px-4 py-2 font-bold">Total</td>
                 <td className="px-4 py-2 text-right font-bold text-red-600">${formatMoney(dExpense)}</td>
+                {hasTC && <td className="px-4 py-2 text-right font-bold text-xs text-gray-500">${toUSD(dExpense)}</td>}
               </tr>
             </tfoot>
           </table>
@@ -177,7 +237,7 @@ export default async function CashFlowPage({
                 <tr key={t.id} className="hover:bg-gray-50">
                   <td className="px-4 py-2 text-gray-500">{t.date}</td>
                   <td className="px-4 py-2">{t.description}</td>
-                  <td className="px-4 py-2 text-gray-500">{(t.categories as { name: string } | null)?.name ?? '—'}</td>
+                  <td className="px-4 py-2 text-gray-500">{(t.categories as unknown as { name: string } | null)?.name ?? '—'}</td>
                   <td className={`px-4 py-2 text-right font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                     {t.type === 'income' ? '+' : '-'}${formatMoney(Number(t.amount))}
                   </td>
