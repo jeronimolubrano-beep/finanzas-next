@@ -58,7 +58,7 @@ export default async function DashboardPage({
   for (const t of allTxs.filter(t => t.type === 'expense')) {
     const cid = String(t.category_id)
     catTotals[cid] = (catTotals[cid] || 0) + Number(t.amount)
-    if (t.categories) catNames[cid] = (t.categories as { name: string }).name
+    if (t.categories) catNames[cid] = (t.categories as unknown as { name: string }).name
   }
   const topCatId = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]
   const topExpenseCat = topCatId ? catNames[topCatId[0]] || '—' : '—'
