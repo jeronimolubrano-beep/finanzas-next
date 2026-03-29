@@ -24,6 +24,11 @@ interface Props {
 
 const COLORS = ['#3b82f6', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#f97316', '#06b6d4', '#ec4899']
 
+function formatTooltip(value: unknown): string {
+  const n = Number(value)
+  return `$${isNaN(n) ? 0 : n.toLocaleString('en-US', { minimumFractionDigits: 0 })}`
+}
+
 function formatARS(value: number): string {
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`
   if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`
@@ -42,9 +47,7 @@ export function DashboardCharts({ monthlyData, categoryData }: Props) {
             <XAxis dataKey="month" tick={{ fontSize: 11 }} />
             <YAxis tickFormatter={formatARS} tick={{ fontSize: 11 }} width={55} />
             <Tooltip
-              formatter={(value: number) =>
-                `$${value.toLocaleString('en-US', { minimumFractionDigits: 0 })}`
-              }
+              formatter={formatTooltip}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Bar dataKey="ingresos" name="Ingresos" fill="#22c55e" radius={[3, 3, 0, 0]} />
@@ -109,9 +112,7 @@ export function DashboardCharts({ monthlyData, categoryData }: Props) {
             <XAxis dataKey="month" tick={{ fontSize: 11 }} />
             <YAxis tickFormatter={formatARS} tick={{ fontSize: 11 }} width={55} />
             <Tooltip
-              formatter={(value: number) =>
-                `$${value.toLocaleString('en-US', { minimumFractionDigits: 0 })}`
-              }
+              formatter={formatTooltip}
             />
             <Bar
               dataKey="neto"
