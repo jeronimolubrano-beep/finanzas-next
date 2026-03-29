@@ -76,11 +76,7 @@ export function DashboardCharts({ monthlyData, categoryData }: Props) {
                     <Cell key={index} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip
-                  formatter={(value: number) =>
-                    `$${value.toLocaleString('en-US', { minimumFractionDigits: 0 })}`
-                  }
-                />
+                <Tooltip formatter={formatTooltip} />
               </PieChart>
             </ResponsiveContainer>
             <div className="space-y-1 mt-2">
