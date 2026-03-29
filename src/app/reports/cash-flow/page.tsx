@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatMoney, statusLabel, formatDateAR } from '@/lib/utils'
+import { formatMoney, statusLabel, formatDateAR, daysUntilDue } from '@/lib/utils'
 import { KPICard } from '@/components/KPICard'
-import { DollarSign } from 'lucide-react'
+import { DollarSign, AlertTriangle, Clock } from 'lucide-react'
+import Link from 'next/link'
 
 export default async function CashFlowPage({
   searchParams,
@@ -45,6 +46,18 @@ export default async function CashFlowPage({
   const tcDate = settingsMap.rate_date || ''
   const tcType = settingsMap.rate_type || ''
   const hasTC = tcRate > 0
+
+  // Pagos pendientes urgentes (global, sin filtro de mes)
+  const { data: pendingTxs } = await supabase
+    .from('transactions')
+    .select('id, type, amount, due_date')
+    .eq('status', 'devengado')
+    .not('due_date', 'is', null)
+
+  const allPending = pendingTxs ?? []
+  const today = new Date().toISOString().slice(0, 10)
+  const overdueCount = allPending.filter(t => t.due_date! < today).length
+  const soonCount = allPending.filter(t => t.due_date! >= today && daysUntilDue(t.due_date!) <= 7).length
 
   // === PERCIBIDO ===
   const percibido = txs.filter(t => t.status === 'percibido')
@@ -97,6 +110,32 @@ export default async function CashFlowPage({
           </button>
         </form>
       </div>
+
+      {/* Alertas de pagos urgentes */}
+      {(overdueCount > 0 || soonCount > 0) && (
+        <div className="space-y-2 mb-6">
+          {overdueCount > 0 && (
+            <Link href="/transactions/pending"
+                  className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 hover:bg-red-100 transition">
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+              <span className="text-sm text-red-700 font-medium flex-1">
+                Tenés {overdueCount} pago{overdueCount > 1 ? 's' : ''} vencido{overdueCount > 1 ? 's' : ''}
+              </span>
+              <span className="text-xs text-red-500">Ver →</span>
+            </Link>
+          )}
+          {soonCount > 0 && (
+            <Link href="/transactions/pending"
+                  className="flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 hover:bg-yellow-100 transition">
+              <Clock className="w-4 h-4 text-yellow-600 shrink-0" />
+              <span className="text-sm text-yellow-700 font-medium flex-1">
+                Tenés {soonCount} pago{soonCount > 1 ? 's' : ''} que vence{soonCount > 1 ? 'n' : ''} esta semana
+              </span>
+              <span className="text-xs text-yellow-500">Ver →</span>
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* KPI Cards - Cobrado/Pagado vs Pendiente */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
