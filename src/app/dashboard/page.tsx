@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { KPICard } from '@/components/KPICard'
-import { formatMoney, formatMoney0, getCurrentMonth, getCurrentYear } from '@/lib/utils'
+import { DashboardCharts } from './DashboardCharts'
+import { formatMoney, formatMoney0, getCurrentYear } from '@/lib/utils'
 
 export default async function DashboardPage({
   searchParams,
@@ -10,7 +11,6 @@ export default async function DashboardPage({
   const params = await searchParams
   const supabase = await createClient()
   const now = new Date()
-  const currentMonth = getCurrentMonth()
   const currentYear = getCurrentYear()
 
   // Determinar rango de fechas segun periodo
@@ -25,44 +25,37 @@ export default async function DashboardPage({
     dateFrom = from.toISOString().slice(0, 10)
   }
 
-  // Query transacciones del periodo
+  // Query transacciones del periodo con fecha y categoria
   let query = supabase
     .from('transactions')
-    .select('type, amount, status')
+    .select('date, type, amount, status, category_id, categories(name)')
     .gte('date', dateFrom)
+    .order('date')
 
   if (params.business_id) {
     query = query.eq('business_id', parseInt(params.business_id))
   }
 
   const { data: txs } = await query
+  const allTxs = txs ?? []
 
-  // KPIs
-  const income = (txs ?? []).filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-  const expense = (txs ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+  // KPIs principales
+  const income = allTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
+  const expense = allTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
   const net = income - expense
   const savingsRate = income > 0 ? (net / income * 100) : 0
 
-  // Cuentas a cobrar / pagar (global, sin filtro de fecha)
+  // Cuentas a cobrar / pagar (devengados, sin filtro de fecha)
   let devQuery = supabase.from('transactions').select('type, amount').eq('status', 'devengado')
   if (params.business_id) devQuery = devQuery.eq('business_id', parseInt(params.business_id))
   const { data: devengados } = await devQuery
-
   const ctasCobrar = (devengados ?? []).filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
   const ctasPagar = (devengados ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
 
   // Top categoria de gasto
-  let topQuery = supabase
-    .from('transactions')
-    .select('category_id, amount, categories(name)')
-    .eq('type', 'expense')
-    .gte('date', dateFrom)
-  if (params.business_id) topQuery = topQuery.eq('business_id', parseInt(params.business_id))
-  const { data: expTxs } = await topQuery
-
   const catTotals: Record<string, number> = {}
   const catNames: Record<string, string> = {}
-  for (const t of expTxs ?? []) {
+  for (const t of allTxs.filter(t => t.type === 'expense')) {
     const cid = String(t.category_id)
     catTotals[cid] = (catTotals[cid] || 0) + Number(t.amount)
     if (t.categories) catNames[cid] = (t.categories as { name: string }).name
@@ -75,9 +68,40 @@ export default async function DashboardPage({
   let ytdQuery = supabase.from('transactions').select('type, amount').gte('date', `${currentYear}-01-01`)
   if (params.business_id) ytdQuery = ytdQuery.eq('business_id', parseInt(params.business_id))
   const { data: ytdTxs } = await ytdQuery
-  const ytdIncome = (ytdTxs ?? []).filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-  const ytdExpense = (ytdTxs ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
-  const ytdNet = ytdIncome - ytdExpense
+  const ytdNet =
+    (ytdTxs ?? []).filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0) -
+    (ytdTxs ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+
+  // ── Datos para gráficos ──────────────────────────────────────────────────
+
+  // Agrupar por mes para el gráfico de barras
+  const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+  const monthMap: Record<string, { ingresos: number; gastos: number }> = {}
+
+  for (const t of allTxs) {
+    const key = t.date.slice(0, 7) // YYYY-MM
+    if (!monthMap[key]) monthMap[key] = { ingresos: 0, gastos: 0 }
+    if (t.type === 'income') monthMap[key].ingresos += Number(t.amount)
+    else monthMap[key].gastos += Number(t.amount)
+  }
+
+  const monthlyData = Object.entries(monthMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, val]) => {
+      const [y, m] = key.split('-')
+      return {
+        month: `${monthNames[parseInt(m) - 1]} ${y.slice(2)}`,
+        ingresos: val.ingresos,
+        gastos: val.gastos,
+        neto: val.ingresos - val.gastos,
+      }
+    })
+
+  // Gastos por categoria para el pie chart
+  const categoryData = Object.entries(catTotals)
+    .map(([cid, total]) => ({ name: catNames[cid] || 'Sin cat.', value: total }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8)
 
   // Empresas para filtro
   const { data: businesses } = await supabase.from('businesses').select('*').order('name')
@@ -138,6 +162,9 @@ export default async function DashboardPage({
                    subtitle="Gastos pendientes de pago" color="orange" />
         </div>
       )}
+
+      {/* Gráficos */}
+      <DashboardCharts monthlyData={monthlyData} categoryData={categoryData} />
     </div>
   )
 }
