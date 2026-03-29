@@ -151,7 +151,7 @@ export default async function DashboardPage({
           <h1 className="text-2xl font-bold text-gray-800">Dashboard KPI</h1>
           <p className="text-sm text-gray-500">{periodLabels[period] || '12 meses'}</p>
         </div>
-        <form className="flex items-center gap-2">
+        <form className="flex flex-wrap items-center gap-2">
           <select name="period" defaultValue={period}
                   className="border rounded-lg px-3 py-1.5 text-sm">
             <option value="1m">Este mes</option>
@@ -217,7 +217,7 @@ export default async function DashboardPage({
       </div>
 
       {/* TC del día + Pendientes */}
-      <div className={`grid gap-4 mb-6 ${hasTC ? 'grid-cols-3' : 'grid-cols-2'}`}>
+      <div className={`grid gap-4 mb-6 grid-cols-1 sm:grid-cols-2 ${hasTC ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
         {hasTC && (
           <KPICard title={`TC ${tcType}`} value={`$${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
                    subtitle={`Actualizado: ${tcDate}`} color="blue" />

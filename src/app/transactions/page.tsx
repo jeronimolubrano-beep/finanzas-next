@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatMoney, statusLabel, dueDateUrgency, daysUntilDue } from '@/lib/utils'
+import { formatMoney, statusLabel, dueDateUrgency, daysUntilDue, formatDateAR, formatDateShort } from '@/lib/utils'
 import Link from 'next/link'
 import { PlusCircle, Pencil, Trash2 } from 'lucide-react'
 import { DeleteButton } from './DeleteButton'
@@ -98,7 +98,7 @@ export default async function TransactionsPage({
 
       {/* Filtros */}
       <form className="bg-white rounded-lg shadow-sm p-4 mb-6">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1 block">Tipo</label>
             <select name="type" defaultValue={params.type ?? ''} className="w-full border rounded px-2 py-1.5 text-sm">
@@ -155,7 +155,7 @@ export default async function TransactionsPage({
             <tbody className="divide-y">
               {(transactions ?? []).map((t) => (
                 <tr key={t.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-500">{t.date}</td>
+                  <td className="px-4 py-3 text-gray-500">{formatDateAR(t.date)}</td>
                   <td className="px-4 py-3 font-medium">{t.description}</td>
                   <td className="px-4 py-3 text-gray-500">{t.categories?.name ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-500">{t.businesses?.name ?? '—'}</td>
@@ -192,7 +192,7 @@ export default async function TransactionsPage({
                       const label = days < 0 ? `${Math.abs(days)}d atraso` : days === 0 ? 'Hoy' : `${days}d`
                       return (
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>
-                          {t.due_date.slice(5)} · {label}
+                          {formatDateShort(t.due_date)} · {label}
                         </span>
                       )
                     })() : t.status === 'devengado' ? (
@@ -228,7 +228,7 @@ export default async function TransactionsPage({
 
         {/* Totales */}
         {transactions && transactions.length > 0 && (
-          <div className="border-t px-4 py-3 bg-gray-50 flex flex-wrap items-center justify-between gap-2 text-sm">
+          <div className="border-t px-4 py-3 bg-gray-50 flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-2 text-sm">
             <span className="text-gray-500 font-medium">
               {transactions.length} transaccion(es)
             </span>

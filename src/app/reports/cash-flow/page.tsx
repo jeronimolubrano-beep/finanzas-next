@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatMoney, statusLabel } from '@/lib/utils'
+import { formatMoney, statusLabel, formatDateAR } from '@/lib/utils'
 import { KPICard } from '@/components/KPICard'
 import { DollarSign } from 'lucide-react'
 
@@ -84,7 +84,7 @@ export default async function CashFlowPage({
           <h1 className="text-2xl font-bold text-gray-800">Cash Flow</h1>
           <p className="text-sm text-gray-500">{monthLabel}</p>
         </div>
-        <form className="flex items-center gap-2">
+        <form className="flex flex-wrap items-center gap-2">
           <input type="month" name="month" defaultValue={selectedMonth}
                  className="border rounded-lg px-3 py-1.5 text-sm" />
           <select name="business_id" defaultValue={params.business_id ?? ''}
@@ -99,13 +99,13 @@ export default async function CashFlowPage({
       </div>
 
       {/* KPI Cards - Cobrado/Pagado vs Pendiente */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
         <KPICard title="Ingresos cobrados" value={`$${formatMoney(pIncome)}`} color="green" />
         <KPICard title="Gastos pagados" value={`$${formatMoney(pExpense)}`} color="red" />
         <KPICard title="Flujo neto efectivo" value={`${pNet >= 0 ? '+' : ''}$${formatMoney(pNet)}`}
                  color={pNet >= 0 ? 'green' : 'red'} />
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <KPICard title="Ingresos totales (incl. pendientes)" value={`$${formatMoney(dIncome)}`} color="cyan" />
         <KPICard title="Gastos totales (incl. pendientes)" value={`$${formatMoney(dExpense)}`} color="orange" />
         <KPICard title="Flujo neto devengado" value={`${dNet >= 0 ? '+' : ''}$${formatMoney(dNet)}`}
@@ -122,7 +122,7 @@ export default async function CashFlowPage({
               TC: ${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })} ({tcType}) al {tcDate}
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <p className="text-xs text-blue-400">Ingresos</p>
               <p className="text-lg font-bold text-green-600">USD ${toUSD(dIncome)}</p>
@@ -235,7 +235,7 @@ export default async function CashFlowPage({
             <tbody className="divide-y">
               {txs.map(t => (
                 <tr key={t.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 text-gray-500">{t.date}</td>
+                  <td className="px-4 py-2 text-gray-500">{formatDateAR(t.date)}</td>
                   <td className="px-4 py-2">{t.description}</td>
                   <td className="px-4 py-2 text-gray-500">{(t.categories as unknown as { name: string } | null)?.name ?? '—'}</td>
                   <td className={`px-4 py-2 text-right font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>

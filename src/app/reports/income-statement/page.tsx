@@ -75,7 +75,7 @@ export default async function IncomeStatementPage({
           <h1 className="text-2xl font-bold text-gray-800">Estado de Resultados</h1>
           <p className="text-sm text-gray-500">Anio {selectedYear}</p>
         </div>
-        <form className="flex items-center gap-2">
+        <form className="flex flex-wrap items-center gap-2">
           <select name="year" defaultValue={selectedYear}
                   className="border rounded-lg px-3 py-1.5 text-sm">
             {years.map(y => <option key={y} value={y}>{y}</option>)}
@@ -178,7 +178,7 @@ export default async function IncomeStatementPage({
       </div>
 
       {/* Resumen anual */}
-      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow-sm p-4 text-center">
           <p className="text-xs text-gray-500 uppercase mb-1">Ingresos {selectedYear}</p>
           <p className="text-xl font-bold text-green-600">${formatMoney0(totalIncome)}</p>
@@ -206,14 +206,14 @@ export default async function IncomeStatementPage({
       {/* Equivalente en USD */}
       {hasTC && (
         <div className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-5">
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
             <DollarSign className="w-4 h-4 text-blue-600" />
             <span className="text-sm font-semibold text-blue-700">Resumen anual en USD</span>
-            <span className="text-xs text-blue-400 ml-auto">
+            <span className="text-xs text-blue-400 sm:ml-auto">
               TC: ${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })} ({tcType}) al {tcDate}
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <p className="text-xs text-blue-400">Ingresos {selectedYear}</p>
               <p className="text-lg font-bold text-green-600">USD ${toUSD(totalIncome)}</p>

@@ -54,7 +54,7 @@ export default async function HomePage() {
             Ver dashboard <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
           <div>
             <div className="flex items-center gap-2 text-sm text-gray-400 mb-1">
               <TrendingUp className="w-4 h-4 text-green-500" />

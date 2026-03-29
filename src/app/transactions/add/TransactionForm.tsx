@@ -56,9 +56,9 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
         </div>
       </div>
 
-      {/* Monto + Moneda + Descripcion */}
-      <div className="grid grid-cols-6 gap-4">
-        <div className="col-span-2">
+      {/* Monto + Moneda */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Monto <span className="text-red-500">*</span>
           </label>
@@ -69,7 +69,7 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
                    className="w-full border rounded-lg pl-7 pr-3 py-2 text-sm" />
           </div>
         </div>
-        <div className="col-span-1">
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Moneda
           </label>
@@ -79,14 +79,16 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
             <option value="USD">USD</option>
           </select>
         </div>
-        <div className="col-span-3">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Descripcion <span className="text-red-500">*</span>
-          </label>
-          <input type="text" name="description" required maxLength={200}
-                 placeholder="Ej: Sueldo marzo, Supermercado Coto"
-                 className="w-full border rounded-lg px-3 py-2 text-sm" />
-        </div>
+      </div>
+
+      {/* Descripcion */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Descripcion <span className="text-red-500">*</span>
+        </label>
+        <input type="text" name="description" required maxLength={200}
+               placeholder="Ej: Sueldo marzo, Supermercado Coto"
+               className="w-full border rounded-lg px-3 py-2 text-sm" />
       </div>
 
       {/* Tipo de cambio (auto-filled) */}

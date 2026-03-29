@@ -36,6 +36,24 @@ export function getToday(): string {
  * - percibido + income → "Cobrado"
  * - percibido + expense → "Pagado"
  */
+/**
+ * Formatea una fecha ISO (YYYY-MM-DD) al formato argentino DD/MM/YYYY
+ */
+export function formatDateAR(isoDate: string): string {
+  if (!isoDate || isoDate.length < 10) return isoDate || ''
+  const [y, m, d] = isoDate.slice(0, 10).split('-')
+  return `${d}/${m}/${y}`
+}
+
+/**
+ * Formatea una fecha ISO (YYYY-MM-DD) al formato corto DD/MM
+ */
+export function formatDateShort(isoDate: string): string {
+  if (!isoDate || isoDate.length < 10) return isoDate || ''
+  const [, m, d] = isoDate.slice(0, 10).split('-')
+  return `${d}/${m}`
+}
+
 export function statusLabel(status: string, type: string): string {
   if (status === 'devengado') return 'Pendiente'
   return type === 'income' ? 'Cobrado' : 'Pagado'

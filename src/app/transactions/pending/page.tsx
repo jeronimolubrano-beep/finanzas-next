@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatMoney, dueDateUrgency, daysUntilDue } from '@/lib/utils'
+import { formatMoney, dueDateUrgency, daysUntilDue, formatDateShort } from '@/lib/utils'
 import { MarkPaidButton } from './MarkPaidButton'
 import Link from 'next/link'
 import { Clock, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2 } from 'lucide-react'
@@ -56,7 +56,7 @@ export default async function PendingPage() {
       : `Vence en ${days}d`
     return (
       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>
-        {dueDate.slice(5).replace('-', '/')} · {label}
+        {formatDateShort(dueDate)} · {label}
       </span>
     )
   }
@@ -85,7 +85,7 @@ export default async function PendingPage() {
           const urgency = dueDateUrgency(t.due_date)
           const rowBg = urgency === 'overdue' ? 'bg-red-50/40' : ''
           return (
-            <div key={t.id} className={`px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition ${rowBg}`}>
+            <div key={t.id} className={`px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 hover:bg-gray-50 transition ${rowBg}`}>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-gray-800 truncate">{t.description}</p>
                 <p className="text-xs text-gray-400 mt-0.5">
@@ -95,16 +95,18 @@ export default async function PendingPage() {
                   <UrgencyBadge dueDate={t.due_date} />
                 </div>
               </div>
-              <div className="text-right shrink-0">
-                <p className={`font-bold text-sm ${color === 'green' ? 'text-green-600' : 'text-red-600'}`}>
-                  {sign}${formatMoney(Number(t.amount))}
-                </p>
-                {hasTC && (
-                  <p className="text-xs text-gray-400">USD ${toUSD(Number(t.amount))}</p>
-                )}
-              </div>
-              <div className="shrink-0">
-                <MarkPaidButton id={t.id} type={t.type} />
+              <div className="flex items-center gap-3 sm:ml-auto">
+                <div className="text-right shrink-0">
+                  <p className={`font-bold text-sm ${color === 'green' ? 'text-green-600' : 'text-red-600'}`}>
+                    {sign}${formatMoney(Number(t.amount))}
+                  </p>
+                  {hasTC && (
+                    <p className="text-xs text-gray-400">USD ${toUSD(Number(t.amount))}</p>
+                  )}
+                </div>
+                <div className="shrink-0">
+                  <MarkPaidButton id={t.id} type={t.type} />
+                </div>
               </div>
             </div>
           )

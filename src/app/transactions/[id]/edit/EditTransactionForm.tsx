@@ -45,8 +45,8 @@ export function EditTransactionForm({ transaction, categories, accounts, busines
       </div>
 
       {/* Monto + Descripcion */}
-      <div className="grid grid-cols-5 gap-4">
-        <div className="col-span-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Monto <span className="text-red-500">*</span>
           </label>
@@ -57,7 +57,7 @@ export function EditTransactionForm({ transaction, categories, accounts, busines
                    className="w-full border rounded-lg pl-7 pr-3 py-2 text-sm" />
           </div>
         </div>
-        <div className="col-span-3">
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Descripcion <span className="text-red-500">*</span>
           </label>

@@ -9,7 +9,7 @@ import {
   Bell, Clock, AlertTriangle,
   type LucideIcon
 } from 'lucide-react'
-import { formatMoney } from '@/lib/utils'
+import { formatMoney, formatDateShort } from '@/lib/utils'
 
 type NavLink = { href: string; label: string; icon: LucideIcon }
 type NavDropdown = { label: string; icon: LucideIcon; children: NavLink[] }
@@ -165,7 +165,7 @@ export function Navbar() {
               </button>
 
               {bellOpen && (
-                <div className="absolute top-full right-0 mt-1 bg-white border rounded-lg shadow-xl w-80 z-50">
+                <div className="absolute top-full right-0 mt-1 bg-white border rounded-lg shadow-xl w-[calc(100vw-2rem)] sm:w-80 z-50">
                   <div className="px-4 py-3 border-b">
                     <p className="font-semibold text-sm text-gray-700">Pagos urgentes</p>
                   </div>
@@ -189,7 +189,7 @@ export function Navbar() {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-gray-800 truncate">{item.description}</p>
                             <p className="text-xs text-gray-400">
-                              {item.overdue ? 'Vencido' : 'Vence'} {item.due_date.slice(5).replace('-', '/')}
+                              {item.overdue ? 'Vencido' : 'Vence'} {formatDateShort(item.due_date)}
                             </p>
                           </div>
                           <span className={`text-xs font-semibold shrink-0 ${item.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
