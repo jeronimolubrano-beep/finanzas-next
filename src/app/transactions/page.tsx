@@ -47,10 +47,40 @@ export default async function TransactionsPage({
   const { data: categories } = await supabase.from('categories').select('*').order('type').order('name')
   const { data: businesses } = await supabase.from('businesses').select('*').order('name')
 
-  // Totales
-  const totalIncome = (transactions ?? []).filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-  const totalExpense = (transactions ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
-  const net = totalIncome - totalExpense
+  // Tipo de cambio actual
+  const { data: settings } = await supabase.from('settings').select('*')
+  const settingsMap: Record<string, string> = {}
+  for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
+  const tcRate = parseFloat(settingsMap.current_rate) || 0
+  const hasTC = tcRate > 0
+
+  // Convertir monto a ARS considerando la moneda de la transaccion
+  function toARS(t: { amount: number | string; currency?: string; exchange_rate?: number | null }): number {
+    const amt = Number(t.amount)
+    if ((t.currency || 'ARS') === 'USD') {
+      const rate = t.exchange_rate || tcRate
+      return amt * rate
+    }
+    return amt
+  }
+
+  function toUSD(t: { amount: number | string; currency?: string; exchange_rate?: number | null }): number {
+    const amt = Number(t.amount)
+    if ((t.currency || 'ARS') === 'ARS') {
+      return tcRate > 0 ? amt / tcRate : 0
+    }
+    return amt
+  }
+
+  // Totales en ARS (normalizados)
+  const totalIncomeARS = (transactions ?? []).filter(t => t.type === 'income').reduce((s, t) => s + toARS(t), 0)
+  const totalExpenseARS = (transactions ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + toARS(t), 0)
+  const netARS = totalIncomeARS - totalExpenseARS
+
+  // Totales en USD
+  const totalIncomeUSD = (transactions ?? []).filter(t => t.type === 'income').reduce((s, t) => s + toUSD(t), 0)
+  const totalExpenseUSD = (transactions ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + toUSD(t), 0)
+  const netUSD = totalIncomeUSD - totalExpenseUSD
 
   return (
     <div>
@@ -114,7 +144,8 @@ export default async function TransactionsPage({
                 <th className="px-4 py-3 text-left">Descripcion</th>
                 <th className="px-4 py-3 text-left">Categoria</th>
                 <th className="px-4 py-3 text-left">Empresa</th>
-                <th className="px-4 py-3 text-right">Monto</th>
+                <th className="px-4 py-3 text-right">Monto ARS</th>
+                {hasTC && <th className="px-4 py-3 text-right">Monto USD</th>}
                 <th className="px-4 py-3 text-center">Tipo</th>
                 <th className="px-4 py-3 text-center">Estado</th>
                 <th className="px-4 py-3 text-center">Acciones</th>
@@ -128,8 +159,14 @@ export default async function TransactionsPage({
                   <td className="px-4 py-3 text-gray-500">{t.categories?.name ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-500">{t.businesses?.name ?? '—'}</td>
                   <td className={`px-4 py-3 text-right font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                    {t.type === 'income' ? '+' : '-'}${formatMoney(Number(t.amount))}
+                    {t.type === 'income' ? '+' : '-'}${formatMoney(toARS(t))}
+                    {t.currency === 'USD' && <span className="text-xs text-gray-400 ml-1">(USD)</span>}
                   </td>
+                  {hasTC && (
+                    <td className="px-4 py-3 text-right text-xs text-gray-500">
+                      {t.type === 'income' ? '+' : '-'}USD ${formatMoney(toUSD(t))}
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-center">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       t.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
@@ -160,7 +197,7 @@ export default async function TransactionsPage({
               ))}
               {(!transactions || transactions.length === 0) && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={hasTC ? 9 : 8} className="px-4 py-12 text-center text-gray-400">
                     No hay transacciones registradas
                   </td>
                 </tr>
@@ -176,12 +213,21 @@ export default async function TransactionsPage({
               {transactions.length} transaccion(es)
             </span>
             <div className="flex items-center gap-4">
-              <span className="text-green-600 font-semibold">+${formatMoney(totalIncome)}</span>
-              <span className="text-red-600 font-semibold">-${formatMoney(totalExpense)}</span>
-              <span className={`font-bold ${net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                Neto: ${formatMoney(net)}
+              <span className="text-green-600 font-semibold">+${formatMoney(totalIncomeARS)}</span>
+              <span className="text-red-600 font-semibold">-${formatMoney(totalExpenseARS)}</span>
+              <span className={`font-bold ${netARS >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                Neto: ${formatMoney(netARS)}
               </span>
             </div>
+            {hasTC && (
+              <div className="flex items-center gap-4 text-xs text-gray-500">
+                <span className="text-green-500">+USD ${formatMoney(totalIncomeUSD)}</span>
+                <span className="text-red-500">-USD ${formatMoney(totalExpenseUSD)}</span>
+                <span className={`font-semibold ${netUSD >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  Neto: USD ${formatMoney(netUSD)}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>

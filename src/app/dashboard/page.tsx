@@ -103,6 +103,20 @@ export default async function DashboardPage({
     .sort((a, b) => b.value - a.value)
     .slice(0, 8)
 
+  // Tipo de cambio
+  const { data: settings } = await supabase.from('settings').select('*')
+  const settingsMap: Record<string, string> = {}
+  for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
+  const tcRate = parseFloat(settingsMap.current_rate) || 0
+  const tcDate = settingsMap.rate_date || ''
+  const tcType = settingsMap.rate_type || ''
+  const hasTC = tcRate > 0
+
+  function toUSD(ars: number): string {
+    if (!hasTC) return ''
+    return (ars / tcRate).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  }
+
   // Empresas para filtro
   const { data: businesses } = await supabase.from('businesses').select('*').order('name')
 
@@ -141,25 +155,40 @@ export default async function DashboardPage({
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
-        <KPICard title="Ingresos" value={`$${formatMoney(income)}`} color="green" />
-        <KPICard title="Gastos" value={`$${formatMoney(expense)}`} color="red" />
+        <KPICard title="Ingresos" value={`$${formatMoney(income)}`} color="green"
+                 usdValue={hasTC ? `$${toUSD(income)}` : undefined} />
+        <KPICard title="Gastos" value={`$${formatMoney(expense)}`} color="red"
+                 usdValue={hasTC ? `$${toUSD(expense)}` : undefined} />
         <KPICard title="Flujo neto" value={`${net >= 0 ? '+' : ''}$${formatMoney(net)}`}
-                 color={net >= 0 ? 'green' : 'red'} />
+                 color={net >= 0 ? 'green' : 'red'}
+                 usdValue={hasTC ? `${net >= 0 ? '+' : ''}$${toUSD(Math.abs(net))}` : undefined} />
         <KPICard title="Tasa ahorro" value={`${savingsRate.toFixed(1)}%`}
                  color={savingsRate >= 20 ? 'green' : savingsRate >= 0 ? 'yellow' : 'red'} />
         <KPICard title="Mayor gasto" value={topExpenseCat}
-                 subtitle={`$${formatMoney(topExpenseTotal)}`} color="purple" />
+                 subtitle={`$${formatMoney(topExpenseTotal)}`} color="purple"
+                 usdValue={hasTC ? `$${toUSD(topExpenseTotal)}` : undefined} />
         <KPICard title="YTD Neto" value={`${ytdNet >= 0 ? '+' : ''}$${formatMoney0(ytdNet)}`}
-                 subtitle={currentYear} color={ytdNet >= 0 ? 'cyan' : 'red'} />
+                 subtitle={currentYear} color={ytdNet >= 0 ? 'cyan' : 'red'}
+                 usdValue={hasTC ? `${ytdNet >= 0 ? '+' : ''}$${toUSD(Math.abs(ytdNet))}` : undefined} />
       </div>
+
+      {/* TC del día */}
+      {hasTC && (
+        <div className="mb-6">
+          <KPICard title={`TC ${tcType}`} value={`$${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                   subtitle={`Actualizado: ${tcDate}`} color="blue" />
+        </div>
+      )}
 
       {/* Cuentas a cobrar / pagar */}
       {(ctasCobrar > 0 || ctasPagar > 0) && (
         <div className="grid grid-cols-2 gap-4 mb-6">
           <KPICard title="Cuentas a cobrar" value={`$${formatMoney(ctasCobrar)}`}
-                   subtitle="Ingresos pendientes de cobro" color="yellow" />
+                   subtitle="Ingresos pendientes de cobro" color="yellow"
+                   usdValue={hasTC ? `$${toUSD(ctasCobrar)}` : undefined} />
           <KPICard title="Cuentas a pagar" value={`$${formatMoney(ctasPagar)}`}
-                   subtitle="Gastos pendientes de pago" color="orange" />
+                   subtitle="Gastos pendientes de pago" color="orange"
+                   usdValue={hasTC ? `$${toUSD(ctasPagar)}` : undefined} />
         </div>
       )}
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { addTransaction } from './actions'
 import { Category, Account, Business } from '@/lib/types'
 import { Save, List } from 'lucide-react'
@@ -15,6 +15,20 @@ interface Props {
 
 export function TransactionForm({ categories, accounts, businesses, today }: Props) {
   const [type, setType] = useState<'income' | 'expense'>('expense')
+  const [currency, setCurrency] = useState<'ARS' | 'USD'>('ARS')
+  const [tcRate, setTcRate] = useState<number | null>(null)
+
+
+  // Fetch TC actual al montar
+  useEffect(() => {
+    fetch('/api/dolar')
+      .then(r => r.json())
+      .then(rates => {
+        const oficial = rates.find((r: { casa: string }) => r.casa === 'oficial')
+        if (oficial) setTcRate(oficial.venta)
+      })
+      .catch(() => {})
+  }, [])
 
   const filteredCategories = categories.filter(c => c.type === type)
 
@@ -41,8 +55,8 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
         </div>
       </div>
 
-      {/* Monto + Descripcion */}
-      <div className="grid grid-cols-5 gap-4">
+      {/* Monto + Moneda + Descripcion */}
+      <div className="grid grid-cols-6 gap-4">
         <div className="col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Monto <span className="text-red-500">*</span>
@@ -54,6 +68,16 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
                    className="w-full border rounded-lg pl-7 pr-3 py-2 text-sm" />
           </div>
         </div>
+        <div className="col-span-1">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Moneda
+          </label>
+          <select name="currency" value={currency} onChange={(e) => setCurrency(e.target.value as 'ARS' | 'USD')}
+                  className="w-full border rounded-lg px-3 py-2 text-sm">
+            <option value="ARS">ARS</option>
+            <option value="USD">USD</option>
+          </select>
+        </div>
         <div className="col-span-3">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Descripcion <span className="text-red-500">*</span>
@@ -62,6 +86,26 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
                  placeholder="Ej: Sueldo marzo, Supermercado Coto"
                  className="w-full border rounded-lg px-3 py-2 text-sm" />
         </div>
+      </div>
+
+      {/* Tipo de cambio (auto-filled) */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm">
+            <span className="font-medium text-blue-700">TC del día (oficial venta): </span>
+            {tcRate ? (
+              <span className="font-bold text-blue-800">${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+            ) : (
+              <span className="text-blue-400">Cargando...</span>
+            )}
+          </div>
+          {currency === 'USD' && tcRate && (
+            <span className="text-xs text-blue-500">
+              Se guardará con este TC
+            </span>
+          )}
+        </div>
+        <input type="hidden" name="exchange_rate" value={tcRate || ''} />
       </div>
 
       {/* Categoria + Cuenta */}
