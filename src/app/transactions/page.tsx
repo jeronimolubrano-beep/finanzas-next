@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatMoney } from '@/lib/utils'
+import { formatMoney, statusLabel } from '@/lib/utils'
 import Link from 'next/link'
 import { PlusCircle, Pencil, Trash2 } from 'lucide-react'
 import { DeleteButton } from './DeleteButton'
@@ -92,8 +92,8 @@ export default async function TransactionsPage({
             <label className="text-xs font-medium text-gray-500 mb-1 block">Estado</label>
             <select name="status" defaultValue={params.status ?? ''} className="w-full border rounded px-2 py-1.5 text-sm">
               <option value="">Todos</option>
-              <option value="percibido">Percibido</option>
-              <option value="devengado">Devengado</option>
+              <option value="percibido">Cobrado / Pagado</option>
+              <option value="devengado">Pendiente</option>
             </select>
           </div>
           <div className="flex items-end">
@@ -141,7 +141,7 @@ export default async function TransactionsPage({
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       t.status === 'devengado' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
                     }`}>
-                      {t.status === 'devengado' ? 'Devengado' : 'Percibido'}
+                      {statusLabel(t.status, t.type)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">

@@ -115,8 +115,8 @@ export function EditTransactionForm({ transaction, categories, accounts, busines
           </label>
           <select name="status" required className="w-full border rounded-lg px-3 py-2 text-sm"
                   defaultValue={transaction.status}>
-            <option value="percibido">Percibido (cobrado/pagado)</option>
-            <option value="devengado">Devengado (pendiente)</option>
+            <option value="percibido">Cobrado / Pagado</option>
+            <option value="devengado">Pendiente</option>
           </select>
         </div>
         <div>

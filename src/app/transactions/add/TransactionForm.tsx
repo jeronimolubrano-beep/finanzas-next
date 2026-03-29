@@ -109,8 +109,8 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
             Estado <span className="text-red-500">*</span>
           </label>
           <select name="status" required className="w-full border rounded-lg px-3 py-2 text-sm">
-            <option value="percibido">Percibido (cobrado/pagado)</option>
-            <option value="devengado">Devengado (pendiente)</option>
+            <option value="percibido">Cobrado / Pagado</option>
+            <option value="devengado">Pendiente</option>
           </select>
         </div>
         <div>

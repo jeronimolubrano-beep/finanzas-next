@@ -29,3 +29,14 @@ export function getCurrentYear(): string {
 export function getToday(): string {
   return new Date().toISOString().slice(0, 10)
 }
+
+/**
+ * Devuelve el label de estado segun tipo de transaccion:
+ * - devengado → "Pendiente"
+ * - percibido + income → "Cobrado"
+ * - percibido + expense → "Pagado"
+ */
+export function statusLabel(status: string, type: string): string {
+  if (status === 'devengado') return 'Pendiente'
+  return type === 'income' ? 'Cobrado' : 'Pagado'
+}

@@ -65,8 +65,7 @@ export default async function DashboardPage({
   for (const t of expTxs ?? []) {
     const cid = String(t.category_id)
     catTotals[cid] = (catTotals[cid] || 0) + Number(t.amount)
-    const cat = t.categories as { name: string } | { name: string }[] | null
-    if (cat) catNames[cid] = Array.isArray(cat) ? cat[0]?.name : cat.name
+    if (t.categories) catNames[cid] = (t.categories as { name: string }).name
   }
   const topCatId = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]
   const topExpenseCat = topCatId ? catNames[topCatId[0]] || '—' : '—'
@@ -134,9 +133,9 @@ export default async function DashboardPage({
       {(ctasCobrar > 0 || ctasPagar > 0) && (
         <div className="grid grid-cols-2 gap-4 mb-6">
           <KPICard title="Cuentas a cobrar" value={`$${formatMoney(ctasCobrar)}`}
-                   subtitle="Ingresos devengados pendientes" color="yellow" />
+                   subtitle="Ingresos pendientes de cobro" color="yellow" />
           <KPICard title="Cuentas a pagar" value={`$${formatMoney(ctasPagar)}`}
-                   subtitle="Gastos devengados pendientes" color="orange" />
+                   subtitle="Gastos pendientes de pago" color="orange" />
         </div>
       )}
     </div>

@@ -176,8 +176,8 @@ export function OcrUploader({ categories, accounts, businesses }: Props) {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
                 <select name="status" required className="w-full border rounded-lg px-3 py-2 text-sm">
-                  <option value="percibido">Percibido</option>
-                  <option value="devengado">Devengado</option>
+                  <option value="percibido">Cobrado / Pagado</option>
+                  <option value="devengado">Pendiente</option>
                 </select>
               </div>
               <div>

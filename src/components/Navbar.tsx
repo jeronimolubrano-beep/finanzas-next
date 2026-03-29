@@ -5,15 +5,10 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, ArrowLeftRight, PlusCircle, List,
-  BarChart3, FileText, Settings, Tag, DollarSign, Menu, X, Camera,
-  type LucideIcon
+  BarChart3, FileText, Settings, Tag, DollarSign, Menu, X, Camera
 } from 'lucide-react'
 
-type NavLink = { href: string; label: string; icon: LucideIcon }
-type NavDropdown = { label: string; icon: LucideIcon; children: NavLink[] }
-type NavItem = NavLink | NavDropdown
-
-const navItems: NavItem[] = [
+const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   {
     label: 'Transacciones',

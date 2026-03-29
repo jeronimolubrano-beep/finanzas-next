@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatMoney } from '@/lib/utils'
+import { formatMoney, statusLabel } from '@/lib/utils'
 import { KPICard } from '@/components/KPICard'
 
 export default async function CashFlowPage({
@@ -87,16 +87,16 @@ export default async function CashFlowPage({
         </form>
       </div>
 
-      {/* KPI Cards - Percibido vs Devengado */}
+      {/* KPI Cards - Cobrado/Pagado vs Pendiente */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-        <KPICard title="Ingresos percibidos" value={`$${formatMoney(pIncome)}`} color="green" />
-        <KPICard title="Gastos percibidos" value={`$${formatMoney(pExpense)}`} color="red" />
-        <KPICard title="Flujo neto percibido" value={`${pNet >= 0 ? '+' : ''}$${formatMoney(pNet)}`}
+        <KPICard title="Ingresos cobrados" value={`$${formatMoney(pIncome)}`} color="green" />
+        <KPICard title="Gastos pagados" value={`$${formatMoney(pExpense)}`} color="red" />
+        <KPICard title="Flujo neto efectivo" value={`${pNet >= 0 ? '+' : ''}$${formatMoney(pNet)}`}
                  color={pNet >= 0 ? 'green' : 'red'} />
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <KPICard title="Ingresos devengados" value={`$${formatMoney(dIncome)}`} color="cyan" />
-        <KPICard title="Gastos devengados" value={`$${formatMoney(dExpense)}`} color="orange" />
+        <KPICard title="Ingresos totales (incl. pendientes)" value={`$${formatMoney(dIncome)}`} color="cyan" />
+        <KPICard title="Gastos totales (incl. pendientes)" value={`$${formatMoney(dExpense)}`} color="orange" />
         <KPICard title="Flujo neto devengado" value={`${dNet >= 0 ? '+' : ''}$${formatMoney(dNet)}`}
                  color={dNet >= 0 ? 'cyan' : 'red'} />
       </div>
@@ -185,7 +185,7 @@ export default async function CashFlowPage({
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       t.status === 'devengado' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
                     }`}>
-                      {t.status === 'devengado' ? 'Devengado' : 'Percibido'}
+                      {statusLabel(t.status, t.type)}
                     </span>
                   </td>
                 </tr>
