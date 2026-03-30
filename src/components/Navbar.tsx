@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import {
   LayoutDashboard, ArrowLeftRight, PlusCircle, List,
-  BarChart3, FileText, Settings, Tag, DollarSign, Menu, X, Camera,
+  BarChart3, FileText, Settings, Tag, DollarSign, Menu, X, Camera, FileUp,
   Bell, Clock, AlertTriangle, LogOut,
   type LucideIcon
 } from 'lucide-react'
@@ -30,6 +30,7 @@ const navItems: NavItem[] = [
       { href: '/transactions/ocr', label: 'Cargar desde imagen', icon: Camera },
       { href: '/transactions', label: 'Ver todas', icon: List },
       { href: '/transactions/pending', label: 'Pagos pendientes', icon: Clock },
+      { href: '/import', label: 'Importar Excel', icon: FileUp },
     ],
   },
   {
