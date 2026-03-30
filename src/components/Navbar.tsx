@@ -59,6 +59,8 @@ interface UrgentItem {
   overdue: boolean
 }
 
+const authPages = ['/login', '/forgot-password', '/reset-password']
+
 export function Navbar() {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -67,6 +69,9 @@ export function Navbar() {
   const [urgentCount, setUrgentCount] = useState(0)
   const [urgentItems, setUrgentItems] = useState<UrgentItem[]>([])
   const bellRef = useRef<HTMLDivElement>(null)
+
+  // Hide navbar on auth pages
+  if (authPages.includes(pathname)) return null
 
   useEffect(() => {
     fetch('/api/pending-count')

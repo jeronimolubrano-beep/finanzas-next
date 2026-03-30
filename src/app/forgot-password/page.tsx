@@ -28,51 +28,46 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--bg)' }}>
-      <div className="w-full max-w-md rounded-2xl shadow-sm border p-8" style={{ background: 'var(--dash-card)', borderColor: 'var(--dash-border)' }}>
+    <div className="min-h-screen flex items-center justify-center p-4"
+         style={{ background: 'linear-gradient(135deg, #f0f0ff 0%, #e8e4ff 50%, #f4f4ff 100%)' }}>
+      <div className="w-full max-w-sm rounded-2xl shadow-lg border p-8"
+           style={{ background: '#ffffff', borderColor: '#e8e8f0' }}>
         {submitted ? (
           <>
             <div className="text-center mb-6">
               <div className="flex justify-center mb-4">
-                <CheckCircle className="w-16 h-16" style={{ color: '#2edbc1' }} />
+                <CheckCircle className="w-14 h-14" style={{ color: '#2edbc1' }} />
               </div>
-              <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--navy)' }}>
+              <h1 className="text-xl font-bold mb-2" style={{ color: '#1a1a2e' }}>
                 Correo enviado
               </h1>
-              <p className="text-sm" style={{ color: '#8b8ec0' }}>
-                Si la dirección de correo existe en nuestro sistema, recibirás un enlace para recuperar tu contraseña.
+              <p className="text-xs" style={{ color: '#8b8ec0' }}>
+                Si la dirección existe, recibirás un enlace para recuperar tu contraseña. El enlace expira en 24 horas.
               </p>
             </div>
 
-            <div className="space-y-3">
-              <p className="text-xs text-center" style={{ color: '#5b5c8c' }}>
-                El enlace expirará en 24 horas.
-              </p>
-              <Link
-                href="/login"
-                className="block w-full text-center text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition"
-                style={{ background: '#6439ff' }}
-              >
-                Volver al inicio de sesión
-              </Link>
-            </div>
+            <Link
+              href="/login"
+              className="block w-full text-center text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition"
+              style={{ background: '#6439ff' }}
+            >
+              Volver al inicio de sesión
+            </Link>
           </>
         ) : (
           <>
-            {/* Header */}
             <div className="text-center mb-8">
-              <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--navy)' }}>
+              <h1 className="text-xl font-bold mb-2" style={{ color: '#1a1a2e' }}>
                 Recuperar contraseña
               </h1>
-              <p className="text-sm" style={{ color: '#8b8ec0' }}>
-                Ingresa tu correo electrónico y te enviaremos un enlace para recuperar tu contraseña.
+              <p className="text-xs" style={{ color: '#8b8ec0' }}>
+                Ingresa tu email y te enviaremos un enlace de recuperación.
               </p>
             </div>
 
-            {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label htmlFor="email" className="block text-sm font-medium mb-1" style={{ color: 'var(--navy)' }}>
+                <label htmlFor="email" className="block text-xs font-medium mb-1.5" style={{ color: '#4a4a6a' }}>
                   Email
                 </label>
                 <input
@@ -82,13 +77,13 @@ export default function ForgotPasswordPage() {
                   placeholder="nombre@empresa.com"
                   required
                   disabled={loading}
-                  className="w-full rounded-lg px-3 py-2 text-sm border bg-white text-black"
-                  style={{ borderColor: '#e8e8f0' }}
+                  className="w-full rounded-lg px-3 py-2.5 text-sm border outline-none transition focus:ring-2"
+                  style={{ borderColor: '#e0e0ef', color: '#1a1a2e', background: '#fafaff' }}
                 />
               </div>
 
               {error && (
-                <div className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(254,73,98,0.1)', color: '#fe4962' }}>
+                <div className="text-xs px-3 py-2.5 rounded-lg" style={{ background: '#fff0f2', color: '#e53e5a', border: '1px solid #fdd' }}>
                   {error}
                 </div>
               )}
@@ -96,28 +91,26 @@ export default function ForgotPasswordPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition disabled:opacity-50"
+                className="w-full text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition disabled:opacity-50"
                 style={{ background: '#6439ff' }}
               >
                 {loading ? 'Enviando...' : 'Enviar enlace'}
               </button>
             </form>
 
-            {/* Back to login */}
             <Link
               href="/login"
-              className="flex items-center justify-center gap-2 mt-6 text-sm transition hover:opacity-80"
+              className="flex items-center justify-center gap-1.5 mt-5 text-xs transition hover:opacity-70"
               style={{ color: '#6439ff' }}
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-3 h-3" />
               Volver al inicio de sesión
             </Link>
           </>
         )}
 
-        {/* Footer */}
-        <p className="text-xs text-center mt-6" style={{ color: '#5b5c8c' }}>
-          © 2024 Grupo Lubrano. All rights reserved.
+        <p className="text-[10px] text-center mt-6" style={{ color: '#b0b3d0' }}>
+          © 2024 Grupo Lubrano
         </p>
       </div>
     </div>
