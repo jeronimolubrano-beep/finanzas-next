@@ -4,8 +4,9 @@ import { useState, useCallback, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { parseExcelCashflow, type ParsedTransaction } from '@/lib/excel-parser'
 import { saveImportedTransactions, getCategories } from './actions'
+import { parsePdfFile } from './pdf-action'
 import { formatMoney } from '@/lib/utils'
-import { Upload, FileSpreadsheet, CheckCircle, AlertTriangle, Loader2, Trash2, ArrowLeft } from 'lucide-react'
+import { Upload, FileSpreadsheet, FileText, CheckCircle, AlertTriangle, Loader2, Trash2, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 
@@ -45,7 +46,7 @@ export default function ImportPage() {
     }
   }, [period])
 
-  const processFile = useCallback((file: File) => {
+  const processFile = useCallback(async (file: File) => {
     if (!period) {
       toast.error('Seleccioná un período primero')
       return
@@ -54,30 +55,66 @@ export default function ImportPage() {
     setLoading(true)
     setFileName(file.name)
 
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer)
-        const workbook = XLSX.read(data, { type: 'array' })
-        const rate = parseFloat(exchangeRate) || 0
-        const parsed = parseExcelCashflow(workbook, period, rate)
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    const isPdf = ext === 'pdf'
 
-        if (parsed.length === 0) {
-          toast.error('No se encontraron transacciones en el archivo')
+    try {
+      if (isPdf) {
+        // PDF: enviar al server para parseo con pdf-parse
+        const formData = new FormData()
+        formData.append('file', file)
+        const rate = parseFloat(exchangeRate) || 0
+
+        const result = await parsePdfFile(formData, period, rate)
+
+        if (result.error) {
+          toast.error(result.error)
           setLoading(false)
           return
         }
 
-        setTransactions(parsed)
+        if (!result.transactions || result.transactions.length === 0) {
+          toast.error('No se encontraron transacciones en el PDF')
+          setLoading(false)
+          return
+        }
+
+        setTransactions(result.transactions)
         setStep('preview')
-        toast.success(`Se parsearon ${parsed.length} transacciones`)
-      } catch (err) {
-        console.error('Error parsing Excel:', err)
-        toast.error('Error al leer el archivo Excel')
+        toast.success(`Se parsearon ${result.transactions.length} transacciones del PDF`)
+      } else {
+        // Excel: parseo client-side con xlsx
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          try {
+            const data = new Uint8Array(e.target?.result as ArrayBuffer)
+            const workbook = XLSX.read(data, { type: 'array' })
+            const rate = parseFloat(exchangeRate) || 0
+            const parsed = parseExcelCashflow(workbook, period, rate)
+
+            if (parsed.length === 0) {
+              toast.error('No se encontraron transacciones en el archivo')
+              setLoading(false)
+              return
+            }
+
+            setTransactions(parsed)
+            setStep('preview')
+            toast.success(`Se parsearon ${parsed.length} transacciones`)
+          } catch (err) {
+            console.error('Error parsing Excel:', err)
+            toast.error('Error al leer el archivo Excel')
+          }
+          setLoading(false)
+        }
+        reader.readAsArrayBuffer(file)
+        return // early return — loading se maneja en onload
       }
-      setLoading(false)
+    } catch (err) {
+      console.error('Error processing file:', err)
+      toast.error('Error al procesar el archivo')
     }
-    reader.readAsArrayBuffer(file)
+    setLoading(false)
   }, [period, exchangeRate])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -180,9 +217,9 @@ export default function ImportPage() {
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </Link>
         <div>
-          <h1 className="text-xl font-bold" style={{ color: '#1a1a2e' }}>Importar Excel</h1>
+          <h1 className="text-xl font-bold" style={{ color: '#1a1a2e' }}>Importar datos</h1>
           <p className="text-xs text-gray-500">
-            {step === 'upload' && 'Subí un archivo de cashflow mensual'}
+            {step === 'upload' && 'Subí un archivo Excel de cashflow o PDF de informe mensual'}
             {step === 'preview' && `${fileName} — ${transactions.length} transacciones parseadas`}
             {step === 'done' && 'Importación completada'}
           </p>
@@ -213,7 +250,7 @@ export default function ImportPage() {
               <input
                 type="number"
                 step="0.01"
-                placeholder="Ej: 1200"
+                placeholder="Ej: 1200 — se auto-detecta del PDF"
                 value={exchangeRate}
                 onChange={e => setExchangeRate(e.target.value)}
                 className="w-full rounded-lg px-3 py-2.5 text-sm border"
@@ -235,7 +272,7 @@ export default function ImportPage() {
             <input
               id="file-input"
               type="file"
-              accept=".xlsx,.xls"
+              accept=".xlsx,.xls,.pdf"
               className="hidden"
               onChange={handleFileInput}
             />
@@ -251,10 +288,10 @@ export default function ImportPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold" style={{ color: '#1a1a2e' }}>
-                    Arrastrá el archivo Excel acá
+                    Arrastrá el archivo acá
                   </p>
                   <p className="text-xs text-gray-400 mt-1">
-                    o hacé click para seleccionar — .xlsx / .xls
+                    o hacé click para seleccionar — .xlsx / .xls / .pdf
                   </p>
                 </div>
               </div>
@@ -262,17 +299,29 @@ export default function ImportPage() {
           </div>
 
           {/* Help */}
-          <div className="rounded-xl border p-4" style={{ background: '#fafaff', borderColor: '#e8e8f0' }}>
-            <div className="flex items-start gap-3">
-              <FileSpreadsheet className="w-5 h-5 shrink-0 mt-0.5" style={{ color: '#6439ff' }} />
-              <div className="text-xs space-y-1" style={{ color: '#5b5c8c' }}>
-                <p className="font-semibold" style={{ color: '#1a1a2e' }}>Formato esperado</p>
-                <p>El archivo debe tener una hoja &quot;CASHFLOW&quot; con la estructura estándar del grupo:</p>
-                <p>• Columnas A-D: Fecha, Concepto, F.Pago, Info Adicional</p>
-                <p>• Columnas E-G: EML (Debe/Haber/Saldo)</p>
-                <p>• Columnas H-J: SADIA (Debe/Haber/Saldo)</p>
-                <p>• Columnas K-M: ÑANCUL (Debe/Haber/Saldo)</p>
-                <p>• Columnas N-P: IBC (Debe/Haber/Saldo)</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-xl border p-4" style={{ background: '#fafaff', borderColor: '#e8e8f0' }}>
+              <div className="flex items-start gap-3">
+                <FileSpreadsheet className="w-5 h-5 shrink-0 mt-0.5" style={{ color: '#2edbc1' }} />
+                <div className="text-xs space-y-1" style={{ color: '#5b5c8c' }}>
+                  <p className="font-semibold" style={{ color: '#1a1a2e' }}>Excel — Cashflow mensual</p>
+                  <p>Hoja &quot;CASHFLOW&quot; con estructura estándar:</p>
+                  <p>• Cols A-D: Fecha, Concepto, F.Pago, Info</p>
+                  <p>• Cols E-P: EML / SADIA / ÑANCUL / IBC</p>
+                  <p>• Genera transacciones individuales</p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-xl border p-4" style={{ background: '#fafaff', borderColor: '#e8e8f0' }}>
+              <div className="flex items-start gap-3">
+                <FileText className="w-5 h-5 shrink-0 mt-0.5" style={{ color: '#fe4962' }} />
+                <div className="text-xs space-y-1" style={{ color: '#5b5c8c' }}>
+                  <p className="font-semibold" style={{ color: '#1a1a2e' }}>PDF — Informe mensual</p>
+                  <p>Informe de ingresos/egresos con detalle:</p>
+                  <p>• Desglose por empresa (SADIA/GUEMES/PDA/ÑANCUL/EML)</p>
+                  <p>• Gastos extraordinarios con fecha</p>
+                  <p>• TC auto-detectado del documento</p>
+                </div>
               </div>
             </div>
           </div>

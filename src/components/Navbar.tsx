@@ -30,7 +30,7 @@ const navItems: NavItem[] = [
       { href: '/transactions/ocr', label: 'Cargar desde imagen', icon: Camera },
       { href: '/transactions', label: 'Ver todas', icon: List },
       { href: '/transactions/pending', label: 'Pagos pendientes', icon: Clock },
-      { href: '/import', label: 'Importar Excel', icon: FileUp },
+      { href: '/import', label: 'Importar datos', icon: FileUp },
     ],
   },
   {
