@@ -2,6 +2,7 @@
 
 import { loginAction } from './actions'
 import { useState } from 'react'
+import { Logo } from '@/components/Logo'
 
 export default function LoginPage() {
   return (
@@ -12,11 +13,7 @@ export default function LoginPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                 style={{ background: '#f4f4ff' }}>
-              <img src="/logo.png" alt="Grupo Lubrano"
-                   className="w-12 h-12 object-contain" />
-            </div>
+            <Logo size={64} />
           </div>
           <h1 className="text-xl font-bold" style={{ color: '#1a1a2e' }}>
             Grupo Lubrano

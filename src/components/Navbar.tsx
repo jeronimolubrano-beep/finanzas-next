@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { formatMoney, formatDateShort } from '@/lib/utils'
 import { logoutAction } from '@/app/login/logout'
+import { LogoNavbar } from '@/components/Logo'
 
 type NavLink = { href: string; label: string; icon: LucideIcon }
 type NavDropdown = { label: string; icon: LucideIcon; children: NavLink[] }
@@ -108,7 +109,7 @@ export function Navbar() {
         <div className="flex items-center justify-between h-14">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Grupo Lubrano" style={{ width: '32px', height: '32px' }} />
+            <LogoNavbar size={32} />
             <span className="tracking-tight text-white font-bold text-lg hidden sm:inline">Grupo Lubrano</span>
           </Link>
 
