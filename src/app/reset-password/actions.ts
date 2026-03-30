@@ -26,10 +26,7 @@ export async function resetPasswordAction(formData: FormData, token: string) {
   const supabase = await createClient()
 
   try {
-    const { error } = await supabase.auth.updateUser(
-      { password },
-      { hashedToken: true }
-    )
+    const { error } = await supabase.auth.updateUser({ password })
 
     if (error) {
       if (error.message.includes('token')) {

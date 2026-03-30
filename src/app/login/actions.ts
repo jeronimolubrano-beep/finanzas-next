@@ -14,19 +14,15 @@ export async function loginAction(formData: FormData) {
 
   const supabase = await createClient()
 
-  try {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
 
-    if (error) {
-      return { error: error.message || 'Error al iniciar sesión. Verifique sus credenciales.' }
-    }
-
-    // Successful login - redirect to dashboard
-    redirect('/')
-  } catch (e) {
-    return { error: 'Error al iniciar sesión. Intente más tarde.' }
+  if (error) {
+    return { error: 'Credenciales inválidas. Verifique su email y contraseña.' }
   }
+
+  // Successful login - redirect to home
+  redirect('/')
 }
