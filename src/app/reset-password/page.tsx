@@ -180,7 +180,7 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--bg)' }}>
+    <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'linear-gradient(135deg, #f0f0ff 0%, #e8e4ff 50%, #f4f4ff 100%)' }}>
       <Suspense fallback={
         <div className="flex items-center justify-center">
           <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#6439ff' }} />
