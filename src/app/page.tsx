@@ -34,7 +34,7 @@ export default async function HomePage() {
       {/* Hero */}
       <div className="text-center mb-10">
         <div className="flex justify-center mb-6">
-          <img src="/logo.png" alt="Grupo Lubrano" style={{ width: '120px', height: '120px' }} />
+          <img src="/logo.png" alt="Grupo Lubrano" style={{ width: '200px', height: 'auto' }} />
         </div>
         <h1 className="text-4xl font-extrabold tracking-tight mb-2" style={{ color: 'var(--navy)' }}>
           Grupo Lubrano
