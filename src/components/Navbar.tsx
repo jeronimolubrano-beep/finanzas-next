@@ -95,7 +95,7 @@ export function Navbar() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 font-bold text-lg text-gray-800">
             <DollarSign className="w-5 h-5 text-blue-600" />
-            Finanzas Familiares
+            Grupo Lubrano
           </Link>
 
           {/* Desktop nav */}

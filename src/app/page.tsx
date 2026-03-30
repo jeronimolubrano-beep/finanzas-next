@@ -37,7 +37,7 @@ export default async function HomePage() {
           <DollarSign className="w-8 h-8" />
         </div>
         <h1 className="text-4xl font-extrabold text-gray-900 mb-2 tracking-tight">
-          Finanzas Familiares
+          Grupo Lubrano
         </h1>
         <p className="text-gray-400 text-lg">
           Sadia · Ñancul · IBC · EML
