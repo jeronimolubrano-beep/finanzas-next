@@ -77,7 +77,6 @@ export function Navbar() {
       .catch(() => {})
   }, [pathname])
 
-  // Cerrar bell dropdown al clickear afuera
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (bellRef.current && !bellRef.current.contains(e.target as Node)) {
@@ -88,58 +87,71 @@ export function Navbar() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClick() { setOpenDropdown(null) }
+    if (openDropdown) {
+      setTimeout(() => document.addEventListener('click', handleClick), 0)
+      return () => document.removeEventListener('click', handleClick)
+    }
+  }, [openDropdown])
+
   return (
-    <nav className="bg-white border-b shadow-sm">
-      <div className="container mx-auto px-4">
+    <nav className="sticky top-0 z-50 border-b" style={{ background: '#06083f', borderColor: '#1a1d5e' }}>
+      <div className="container mx-auto px-4 max-w-7xl">
         <div className="flex items-center justify-between h-14">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 font-bold text-lg text-gray-800">
-            <DollarSign className="w-5 h-5 text-blue-600" />
-            Grupo Lubrano
+          <Link href="/" className="flex items-center gap-2.5">
+            <img src="/logo.png" alt="Grupo Lubrano" style={{ width: '32px', height: '32px' }} />
+            <span className="tracking-tight text-white font-bold text-lg hidden sm:inline">Grupo Lubrano</span>
           </Link>
 
           {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-1">
+          <div className="hidden md:flex items-center gap-0.5">
             {navItems.map((item) =>
               isLink(item) ? (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     pathname === item.href
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-gray-600 hover:bg-gray-100'
+                      ? 'text-white'
+                      : 'text-[#8b8ec0] hover:text-white'
                   }`}
+                  style={pathname === item.href ? { background: 'rgba(100,57,255,0.25)' } : {}}
                 >
-                  <item.icon className="w-4 h-4 inline mr-1" />
+                  <item.icon className="w-4 h-4 inline mr-1.5 -mt-0.5" />
                   {item.label}
                 </Link>
               ) : (
                 <div key={item.label} className="relative">
                   <button
-                    onClick={() =>
+                    onClick={(e) => {
+                      e.stopPropagation()
                       setOpenDropdown(openDropdown === item.label ? null : item.label)
-                    }
-                    className="px-3 py-2 rounded text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+                    }}
+                    className="px-3 py-2 rounded-lg text-sm font-medium text-[#8b8ec0] hover:text-white transition-all"
                   >
-                    <item.icon className="w-4 h-4 inline mr-1" />
+                    <item.icon className="w-4 h-4 inline mr-1.5 -mt-0.5" />
                     {item.label}
-                    <span className="ml-1 text-xs">&#9662;</span>
+                    <span className="ml-1 text-[10px] opacity-60">&#9662;</span>
                   </button>
                   {openDropdown === item.label && (
-                    <div className="absolute top-full left-0 mt-1 bg-white border rounded-lg shadow-lg py-1 min-w-[200px] z-50">
+                    <div className="absolute top-full left-0 mt-1.5 rounded-xl shadow-2xl py-1.5 min-w-[220px] z-50 border"
+                         style={{ background: '#232a5c', borderColor: '#333b72' }}>
                       {item.children?.map((child) => (
                         <Link
                           key={child.href}
                           href={child.href}
                           onClick={() => setOpenDropdown(null)}
-                          className={`block px-4 py-2 text-sm transition-colors ${
+                          className={`flex items-center gap-2.5 px-4 py-2.5 text-sm transition-all ${
                             pathname === child.href
-                              ? 'bg-blue-50 text-blue-700'
-                              : 'text-gray-600 hover:bg-gray-50'
+                              ? 'text-white'
+                              : 'text-[#8b8ec0] hover:text-white hover:bg-white/5'
                           }`}
+                          style={pathname === child.href ? { background: 'rgba(100,57,255,0.2)' } : {}}
                         >
-                          <child.icon className="w-4 h-4 inline mr-2" />
+                          <child.icon className="w-4 h-4" />
                           {child.label}
                         </Link>
                       ))}
@@ -149,59 +161,60 @@ export function Navbar() {
               )
             )}
 
-            {/* Bell de alertas */}
-            <div className="relative ml-1" ref={bellRef}>
+            {/* Bell */}
+            <div className="relative ml-2" ref={bellRef}>
               <button
                 onClick={() => setBellOpen(!bellOpen)}
-                className="relative p-2 rounded text-gray-500 hover:bg-gray-100 transition-colors"
-                title="Pagos urgentes"
+                className="relative p-2 rounded-lg text-[#8b8ec0] hover:text-white transition-all"
               >
                 <Bell className="w-4 h-4" />
                 {urgentCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  <span className="absolute -top-0.5 -right-0.5 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center"
+                        style={{ background: '#fe4962' }}>
                     {urgentCount > 9 ? '9+' : urgentCount}
                   </span>
                 )}
               </button>
 
               {bellOpen && (
-                <div className="absolute top-full right-0 mt-1 bg-white border rounded-lg shadow-xl w-[calc(100vw-2rem)] sm:w-80 z-50">
-                  <div className="px-4 py-3 border-b">
-                    <p className="font-semibold text-sm text-gray-700">Pagos urgentes</p>
+                <div className="absolute top-full right-0 mt-1.5 rounded-xl shadow-2xl w-[calc(100vw-2rem)] sm:w-80 z-50 border overflow-hidden"
+                     style={{ background: '#232a5c', borderColor: '#333b72' }}>
+                  <div className="px-4 py-3 border-b" style={{ borderColor: '#333b72' }}>
+                    <p className="font-semibold text-sm text-white">Pagos urgentes</p>
                   </div>
                   {urgentItems.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-sm text-gray-400">
+                    <div className="px-4 py-6 text-center text-sm text-[#5b5c8c]">
                       Sin pagos urgentes
                     </div>
                   ) : (
-                    <div className="divide-y max-h-72 overflow-y-auto">
+                    <div className="divide-y max-h-72 overflow-y-auto" style={{ borderColor: '#333b72' }}>
                       {urgentItems.map(item => (
                         <Link
                           key={item.id}
                           href="/transactions/pending"
                           onClick={() => setBellOpen(false)}
-                          className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition"
+                          className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition"
                         >
                           {item.overdue
-                            ? <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-                            : <Clock className="w-4 h-4 text-yellow-500 shrink-0" />
+                            ? <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: '#fe4962' }} />
+                            : <Clock className="w-4 h-4 text-yellow-400 shrink-0" />
                           }
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-800 truncate">{item.description}</p>
-                            <p className="text-xs text-gray-400">
+                            <p className="text-sm font-medium text-white truncate">{item.description}</p>
+                            <p className="text-xs text-[#5b5c8c]">
                               {item.overdue ? 'Vencido' : 'Vence'} {formatDateShort(item.due_date)}
                             </p>
                           </div>
-                          <span className={`text-xs font-semibold shrink-0 ${item.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                          <span className={`text-xs font-semibold shrink-0 ${item.type === 'income' ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
                             {item.type === 'income' ? '+' : '-'}${formatMoney(Number(item.amount))}
                           </span>
                         </Link>
                       ))}
                     </div>
                   )}
-                  <div className="px-4 py-2 border-t">
+                  <div className="px-4 py-2.5 border-t" style={{ borderColor: '#333b72' }}>
                     <Link href="/transactions/pending" onClick={() => setBellOpen(false)}
-                          className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                          className="text-xs font-medium" style={{ color: '#6439ff' }}>
                       Ver todos los pendientes →
                     </Link>
                   </div>
@@ -211,10 +224,7 @@ export function Navbar() {
           </div>
 
           {/* Mobile toggle */}
-          <button
-            className="md:hidden p-2"
-            onClick={() => setMobileOpen(!mobileOpen)}
-          >
+          <button className="md:hidden p-2 text-white" onClick={() => setMobileOpen(!mobileOpen)}>
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
@@ -228,14 +238,14 @@ export function Navbar() {
                   key={item.href}
                   href={item.href}
                   onClick={() => setMobileOpen(false)}
-                  className="block px-3 py-2 rounded text-sm text-gray-600 hover:bg-gray-100"
+                  className="block px-3 py-2.5 rounded-lg text-sm text-[#8b8ec0] hover:text-white hover:bg-white/5"
                 >
                   <item.icon className="w-4 h-4 inline mr-2" />
                   {item.label}
                 </Link>
               ) : (
                 <div key={item.label}>
-                  <div className="px-3 py-2 text-xs font-bold text-gray-400 uppercase">
+                  <div className="px-3 py-2 text-xs font-bold text-[#5b5c8c] uppercase tracking-wider">
                     {item.label}
                   </div>
                   {item.children?.map((child) => (
@@ -243,7 +253,7 @@ export function Navbar() {
                       key={child.href}
                       href={child.href}
                       onClick={() => setMobileOpen(false)}
-                      className="block px-6 py-2 rounded text-sm text-gray-600 hover:bg-gray-100"
+                      className="block px-6 py-2.5 rounded-lg text-sm text-[#8b8ec0] hover:text-white hover:bg-white/5"
                     >
                       <child.icon className="w-4 h-4 inline mr-2" />
                       {child.label}
@@ -252,13 +262,12 @@ export function Navbar() {
                 </div>
               )
             )}
-            {/* Mobile: link a pendientes con badge */}
             <Link href="/transactions/pending" onClick={() => setMobileOpen(false)}
-                  className="flex items-center gap-2 px-3 py-2 rounded text-sm text-gray-600 hover:bg-gray-100">
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-[#8b8ec0] hover:text-white hover:bg-white/5">
               <Bell className="w-4 h-4" />
               Pagos urgentes
               {urgentCount > 0 && (
-                <span className="bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
+                <span className="text-white text-xs font-bold rounded-full px-1.5 py-0.5" style={{ background: '#fe4962' }}>
                   {urgentCount}
                 </span>
               )}

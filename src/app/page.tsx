@@ -33,150 +33,158 @@ export default async function HomePage() {
     <div className="max-w-5xl mx-auto py-8">
       {/* Hero */}
       <div className="text-center mb-10">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white mb-4 shadow-lg">
-          <DollarSign className="w-8 h-8" />
+        <div className="flex justify-center mb-6">
+          <img src="/logo.png" alt="Grupo Lubrano" style={{ width: '120px', height: '120px' }} />
         </div>
-        <h1 className="text-4xl font-extrabold text-gray-900 mb-2 tracking-tight">
+        <h1 className="text-4xl font-extrabold tracking-tight mb-2" style={{ color: 'var(--navy)' }}>
           Grupo Lubrano
         </h1>
-        <p className="text-gray-400 text-lg">
+        <p className="text-lg" style={{ color: '#8b8ec0' }}>
           Sadia · Ñancul · IBC · EML
         </p>
       </div>
 
       {/* Resumen del mes */}
-      <div className="bg-white rounded-2xl shadow-sm border p-6 mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+      <div className="rounded-2xl shadow-sm border p-6 mb-8" style={{ background: 'var(--dash-card)', borderColor: 'var(--dash-border)' }}>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: '#8b8ec0' }}>
             {monthNames[now.getMonth()]} {now.getFullYear()}
           </h2>
-          <Link href="/dashboard" className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">
+          <Link href="/dashboard" className="text-xs font-medium flex items-center gap-1 hover:opacity-80 transition" style={{ color: '#6439ff' }}>
             Ver dashboard <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
           <div>
-            <div className="flex items-center gap-2 text-sm text-gray-400 mb-1">
-              <TrendingUp className="w-4 h-4 text-green-500" />
+            <div className="flex items-center gap-2 text-sm mb-1" style={{ color: '#8b8ec0' }}>
+              <TrendingUp className="w-4 h-4" style={{ color: '#2edbc1' }} />
               Ingresos
             </div>
-            <p className="text-2xl font-bold text-green-600">${formatMoney0(monthIncome)}</p>
+            <p className="text-2xl font-bold" style={{ color: '#2edbc1' }}>${formatMoney0(monthIncome)}</p>
           </div>
           <div>
-            <div className="flex items-center gap-2 text-sm text-gray-400 mb-1">
-              <TrendingDown className="w-4 h-4 text-red-500" />
+            <div className="flex items-center gap-2 text-sm mb-1" style={{ color: '#8b8ec0' }}>
+              <TrendingDown className="w-4 h-4" style={{ color: '#fe4962' }} />
               Gastos
             </div>
-            <p className="text-2xl font-bold text-red-500">${formatMoney0(monthExpense)}</p>
+            <p className="text-2xl font-bold" style={{ color: '#fe4962' }}>${formatMoney0(monthExpense)}</p>
           </div>
           <div>
-            <div className="flex items-center gap-2 text-sm text-gray-400 mb-1">
-              <DollarSign className="w-4 h-4 text-blue-500" />
+            <div className="flex items-center gap-2 text-sm mb-1" style={{ color: '#8b8ec0' }}>
+              <DollarSign className="w-4 h-4" style={{ color: '#6439ff' }} />
               Flujo neto
             </div>
-            <p className={`text-2xl font-bold ${monthNet >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+            <p className="text-2xl font-bold" style={{ color: monthNet >= 0 ? '#2edbc1' : '#fe4962' }}>
               {monthNet >= 0 ? '+' : ''}${formatMoney0(monthNet)}
             </p>
           </div>
         </div>
         {(totalTxs ?? 0) > 0 && (
-          <p className="text-xs text-gray-300 mt-4 pt-3 border-t">
+          <p className="text-xs mt-4 pt-3" style={{ color: '#5b5c8c', borderTop: '1px solid var(--dash-border)' }}>
             {totalTxs} transacciones registradas en total
           </p>
         )}
       </div>
 
       {/* Acciones rapidas */}
-      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wide mb-4" style={{ color: '#8b8ec0' }}>
         Acciones rapidas
       </h2>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         <Link href="/transactions/add"
-              className="group flex flex-col items-center gap-3 p-5 bg-white rounded-xl shadow-sm border hover:border-blue-300 hover:shadow-md transition-all">
-          <div className="p-3 rounded-xl bg-blue-50 text-blue-600 group-hover:bg-blue-100 transition">
+              className="group flex flex-col items-center gap-3 p-5 rounded-xl border transition-all hover:scale-[1.02]"
+              style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+          <div className="p-3 rounded-xl transition" style={{ background: 'rgba(100,57,255,0.1)', color: '#6439ff' }}>
             <PlusCircle className="w-6 h-6" />
           </div>
-          <span className="text-sm font-medium text-gray-700">Agregar manual</span>
+          <span className="text-sm font-medium" style={{ color: 'var(--navy)' }}>Agregar manual</span>
         </Link>
 
         <Link href="/transactions/ocr"
-              className="group flex flex-col items-center gap-3 p-5 bg-white rounded-xl shadow-sm border hover:border-purple-300 hover:shadow-md transition-all">
-          <div className="p-3 rounded-xl bg-purple-50 text-purple-600 group-hover:bg-purple-100 transition">
+              className="group flex flex-col items-center gap-3 p-5 rounded-xl border transition-all hover:scale-[1.02]"
+              style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+          <div className="p-3 rounded-xl transition" style={{ background: 'rgba(139,111,255,0.1)', color: '#8b6fff' }}>
             <Camera className="w-6 h-6" />
           </div>
-          <span className="text-sm font-medium text-gray-700">Escanear ticket</span>
+          <span className="text-sm font-medium" style={{ color: 'var(--navy)' }}>Escanear ticket</span>
         </Link>
 
         <Link href="/transactions"
-              className="group flex flex-col items-center gap-3 p-5 bg-white rounded-xl shadow-sm border hover:border-gray-400 hover:shadow-md transition-all">
-          <div className="p-3 rounded-xl bg-gray-100 text-gray-600 group-hover:bg-gray-200 transition">
+              className="group flex flex-col items-center gap-3 p-5 rounded-xl border transition-all hover:scale-[1.02]"
+              style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+          <div className="p-3 rounded-xl transition" style={{ background: 'rgba(46,219,193,0.1)', color: '#2edbc1' }}>
             <List className="w-6 h-6" />
           </div>
-          <span className="text-sm font-medium text-gray-700">Transacciones</span>
+          <span className="text-sm font-medium" style={{ color: 'var(--navy)' }}>Transacciones</span>
         </Link>
 
         <Link href="/dashboard"
-              className="group flex flex-col items-center gap-3 p-5 bg-white rounded-xl shadow-sm border hover:border-green-300 hover:shadow-md transition-all">
-          <div className="p-3 rounded-xl bg-green-50 text-green-600 group-hover:bg-green-100 transition">
+              className="group flex flex-col items-center gap-3 p-5 rounded-xl border transition-all hover:scale-[1.02]"
+              style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+          <div className="p-3 rounded-xl transition" style={{ background: 'rgba(100,57,255,0.1)', color: '#6439ff' }}>
             <LayoutDashboard className="w-6 h-6" />
           </div>
-          <span className="text-sm font-medium text-gray-700">Dashboard</span>
+          <span className="text-sm font-medium" style={{ color: 'var(--navy)' }}>Dashboard</span>
         </Link>
       </div>
 
       {/* Reportes y Config */}
       <div className="grid lg:grid-cols-2 gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: '#8b8ec0' }}>
             Reportes
           </h2>
           <div className="space-y-2">
             <Link href="/reports/cash-flow"
-                  className="flex items-center gap-3 p-4 bg-white rounded-xl shadow-sm border hover:border-green-300 hover:shadow-md transition-all">
-              <div className="p-2 rounded-lg bg-green-50 text-green-600">
+                  className="flex items-center gap-3 p-4 rounded-xl border transition-all hover:scale-[1.01]"
+                  style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+              <div className="p-2 rounded-lg" style={{ background: 'rgba(46,219,193,0.1)', color: '#2edbc1' }}>
                 <BarChart3 className="w-5 h-5" />
               </div>
               <div>
-                <span className="font-medium text-gray-700 text-sm">Cash Flow</span>
-                <p className="text-xs text-gray-400">Flujo de caja mensual percibido vs devengado</p>
+                <span className="font-medium text-sm" style={{ color: 'var(--navy)' }}>Cash Flow</span>
+                <p className="text-xs" style={{ color: '#8b8ec0' }}>Flujo de caja mensual percibido vs devengado</p>
               </div>
             </Link>
             <Link href="/reports/income-statement"
-                  className="flex items-center gap-3 p-4 bg-white rounded-xl shadow-sm border hover:border-yellow-300 hover:shadow-md transition-all">
-              <div className="p-2 rounded-lg bg-yellow-50 text-yellow-600">
+                  className="flex items-center gap-3 p-4 rounded-xl border transition-all hover:scale-[1.01]"
+                  style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+              <div className="p-2 rounded-lg" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
                 <FileText className="w-5 h-5" />
               </div>
               <div>
-                <span className="font-medium text-gray-700 text-sm">Estado de Resultados</span>
-                <p className="text-xs text-gray-400">Tabla anual de ingresos, gastos y tasa de ahorro</p>
+                <span className="font-medium text-sm" style={{ color: 'var(--navy)' }}>Estado de Resultados</span>
+                <p className="text-xs" style={{ color: '#8b8ec0' }}>Tabla anual de ingresos, gastos y tasa de ahorro</p>
               </div>
             </Link>
           </div>
         </div>
 
         <div>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: '#8b8ec0' }}>
             Configuracion
           </h2>
           <div className="space-y-2">
             <Link href="/categories"
-                  className="flex items-center gap-3 p-4 bg-white rounded-xl shadow-sm border hover:border-blue-300 hover:shadow-md transition-all">
-              <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
+                  className="flex items-center gap-3 p-4 rounded-xl border transition-all hover:scale-[1.01]"
+                  style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+              <div className="p-2 rounded-lg" style={{ background: 'rgba(100,57,255,0.1)', color: '#6439ff' }}>
                 <Tag className="w-5 h-5" />
               </div>
               <div>
-                <span className="font-medium text-gray-700 text-sm">Categorias</span>
-                <p className="text-xs text-gray-400">Administrar categorias de ingresos y gastos</p>
+                <span className="font-medium text-sm" style={{ color: 'var(--navy)' }}>Categorias</span>
+                <p className="text-xs" style={{ color: '#8b8ec0' }}>Administrar categorias de ingresos y gastos</p>
               </div>
             </Link>
             <Link href="/settings"
-                  className="flex items-center gap-3 p-4 bg-white rounded-xl shadow-sm border hover:border-orange-300 hover:shadow-md transition-all">
-              <div className="p-2 rounded-lg bg-orange-50 text-orange-600">
+                  className="flex items-center gap-3 p-4 rounded-xl border transition-all hover:scale-[1.01]"
+                  style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+              <div className="p-2 rounded-lg" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316' }}>
                 <DollarSign className="w-5 h-5" />
               </div>
               <div>
-                <span className="font-medium text-gray-700 text-sm">Tipo de Cambio</span>
-                <p className="text-xs text-gray-400">Configurar cotizacion ARS/USD</p>
+                <span className="font-medium text-sm" style={{ color: 'var(--navy)' }}>Tipo de Cambio</span>
+                <p className="text-xs" style={{ color: '#8b8ec0' }}>Configurar cotizacion ARS/USD</p>
               </div>
             </Link>
           </div>

@@ -1,9 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { KPICard } from '@/components/KPICard'
 import { DashboardCharts } from './DashboardCharts'
-import { formatMoney, formatMoney0, getCurrentYear, daysUntilDue } from '@/lib/utils'
+import { formatMoney, getCurrentYear, daysUntilDue } from '@/lib/utils'
 import Link from 'next/link'
-import { AlertTriangle, Clock } from 'lucide-react'
+import { AlertTriangle, Clock, BarChart3 } from 'lucide-react'
 
 export default async function DashboardPage({
   searchParams,
@@ -47,13 +47,6 @@ export default async function DashboardPage({
   const net = income - expense
   const savingsRate = income > 0 ? (net / income * 100) : 0
 
-  // Cuentas a cobrar / pagar (devengados, sin filtro de fecha)
-  let devQuery = supabase.from('transactions').select('type, amount').eq('status', 'devengado')
-  if (params.business_id) devQuery = devQuery.eq('business_id', parseInt(params.business_id))
-  const { data: devengados } = await devQuery
-  const ctasCobrar = (devengados ?? []).filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-  const ctasPagar = (devengados ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
-
   // Top categoria de gasto
   const catTotals: Record<string, number> = {}
   const catNames: Record<string, string> = {}
@@ -66,22 +59,13 @@ export default async function DashboardPage({
   const topExpenseCat = topCatId ? catNames[topCatId[0]] || '—' : '—'
   const topExpenseTotal = topCatId ? topCatId[1] : 0
 
-  // YTD
-  let ytdQuery = supabase.from('transactions').select('type, amount').gte('date', `${currentYear}-01-01`)
-  if (params.business_id) ytdQuery = ytdQuery.eq('business_id', parseInt(params.business_id))
-  const { data: ytdTxs } = await ytdQuery
-  const ytdNet =
-    (ytdTxs ?? []).filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0) -
-    (ytdTxs ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
-
   // ── Datos para gráficos ──────────────────────────────────────────────────
 
-  // Agrupar por mes para el gráfico de barras
   const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
   const monthMap: Record<string, { ingresos: number; gastos: number }> = {}
 
   for (const t of allTxs) {
-    const key = t.date.slice(0, 7) // YYYY-MM
+    const key = t.date.slice(0, 7)
     if (!monthMap[key]) monthMap[key] = { ingresos: 0, gastos: 0 }
     if (t.type === 'income') monthMap[key].ingresos += Number(t.amount)
     else monthMap[key].gastos += Number(t.amount)
@@ -99,7 +83,6 @@ export default async function DashboardPage({
       }
     })
 
-  // Gastos por categoria para el pie chart
   const categoryData = Object.entries(catTotals)
     .map(([cid, total]) => ({ name: catNames[cid] || 'Sin cat.', value: total }))
     .sort((a, b) => b.value - a.value)
@@ -119,7 +102,7 @@ export default async function DashboardPage({
     return (ars / tcRate).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   }
 
-  // Pagos pendientes para alertas (sin filtro de empresa ni período)
+  // Pagos pendientes para alertas
   const { data: pendingTxs } = await supabase
     .from('transactions')
     .select('id, type, amount, due_date, currency, exchange_rate')
@@ -144,16 +127,22 @@ export default async function DashboardPage({
   }
 
   return (
-    <div>
+    <div className="-mx-4 -mt-6 min-h-screen px-4 py-6 sm:px-6" style={{ background: 'var(--dash-bg)' }}>
       {/* Header + filtros */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Dashboard KPI</h1>
-          <p className="text-sm text-gray-500">{periodLabels[period] || '12 meses'}</p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(100,57,255,0.2)' }}>
+            <BarChart3 className="w-5 h-5" style={{ color: '#6439ff' }} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-white">Dashboard</h1>
+            <p className="text-xs" style={{ color: '#5b5c8c' }}>{periodLabels[period] || '12 meses'}</p>
+          </div>
         </div>
         <form className="flex flex-wrap items-center gap-2">
           <select name="period" defaultValue={period}
-                  className="border rounded-lg px-3 py-1.5 text-sm">
+                  className="rounded-lg px-3 py-1.5 text-sm border-0 text-white"
+                  style={{ background: 'var(--dash-card)', color: 'var(--dash-text)' }}>
             <option value="1m">Este mes</option>
             <option value="3m">3 meses</option>
             <option value="6m">6 meses</option>
@@ -161,11 +150,13 @@ export default async function DashboardPage({
             <option value="ytd">YTD ({currentYear})</option>
           </select>
           <select name="business_id" defaultValue={params.business_id ?? ''}
-                  className="border rounded-lg px-3 py-1.5 text-sm">
+                  className="rounded-lg px-3 py-1.5 text-sm border-0"
+                  style={{ background: 'var(--dash-card)', color: 'var(--dash-text)' }}>
             <option value="">Todas las empresas</option>
             {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
-          <button type="submit" className="bg-gray-800 text-white px-4 py-1.5 rounded-lg text-sm font-medium">
+          <button type="submit" className="px-4 py-1.5 rounded-lg text-sm font-medium text-white transition hover:opacity-90"
+                  style={{ background: '#6439ff' }}>
             Filtrar
           </button>
         </form>
@@ -176,62 +167,64 @@ export default async function DashboardPage({
         <div className="space-y-2 mb-6">
           {overdueItems.length > 0 && (
             <Link href="/transactions/pending"
-                  className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 hover:bg-red-100 transition">
-              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-              <span className="text-sm text-red-700 font-medium flex-1">
+                  className="flex items-center gap-3 rounded-lg px-4 py-3 transition border"
+                  style={{ background: 'rgba(254,73,98,0.1)', borderColor: 'rgba(254,73,98,0.3)' }}>
+              <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: '#fe4962' }} />
+              <span className="text-sm font-medium flex-1" style={{ color: '#fe4962' }}>
                 Tenés {overdueItems.length} pago{overdueItems.length > 1 ? 's' : ''} vencido{overdueItems.length > 1 ? 's' : ''}
               </span>
-              <span className="text-xs text-red-500">Ver →</span>
+              <span className="text-xs" style={{ color: '#fe4962' }}>Ver →</span>
             </Link>
           )}
           {soonItems.length > 0 && (
             <Link href="/transactions/pending"
-                  className="flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 hover:bg-yellow-100 transition">
-              <Clock className="w-4 h-4 text-yellow-600 shrink-0" />
-              <span className="text-sm text-yellow-700 font-medium flex-1">
+                  className="flex items-center gap-3 rounded-lg px-4 py-3 transition border"
+                  style={{ background: 'rgba(245,158,11,0.1)', borderColor: 'rgba(245,158,11,0.3)' }}>
+              <Clock className="w-4 h-4 shrink-0 text-yellow-400" />
+              <span className="text-sm font-medium flex-1 text-yellow-400">
                 Tenés {soonItems.length} pago{soonItems.length > 1 ? 's' : ''} que vence{soonItems.length > 1 ? 'n' : ''} esta semana
               </span>
-              <span className="text-xs text-yellow-500">Ver →</span>
+              <span className="text-xs text-yellow-400">Ver →</span>
             </Link>
           )}
         </div>
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
-        <KPICard title="Ingresos" value={`$${formatMoney(income)}`} color="green"
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-5">
+        <KPICard dark title="Ingresos" value={`$${formatMoney(income)}`} color="green"
                  usdValue={hasTC ? `$${toUSD(income)}` : undefined} />
-        <KPICard title="Gastos" value={`$${formatMoney(expense)}`} color="red"
+        <KPICard dark title="Gastos" value={`$${formatMoney(expense)}`} color="red"
                  usdValue={hasTC ? `$${toUSD(expense)}` : undefined} />
-        <KPICard title="Flujo neto" value={`${net >= 0 ? '+' : ''}$${formatMoney(net)}`}
+        <KPICard dark title="Flujo neto" value={`${net >= 0 ? '+' : ''}$${formatMoney(net)}`}
                  color={net >= 0 ? 'green' : 'red'}
                  usdValue={hasTC ? `${net >= 0 ? '+' : ''}$${toUSD(Math.abs(net))}` : undefined} />
-        <KPICard title="Tasa ahorro" value={`${savingsRate.toFixed(1)}%`}
-                 color={savingsRate >= 20 ? 'green' : savingsRate >= 0 ? 'yellow' : 'red'} />
-        <KPICard title="Mayor gasto" value={topExpenseCat}
-                 subtitle={`$${formatMoney(topExpenseTotal)}`} color="purple"
-                 usdValue={hasTC ? `$${toUSD(topExpenseTotal)}` : undefined} />
-        <KPICard title="YTD Neto" value={`${ytdNet >= 0 ? '+' : ''}$${formatMoney0(ytdNet)}`}
-                 subtitle={currentYear} color={ytdNet >= 0 ? 'cyan' : 'red'}
-                 usdValue={hasTC ? `${ytdNet >= 0 ? '+' : ''}$${toUSD(Math.abs(ytdNet))}` : undefined} />
-      </div>
-
-      {/* TC del día + Pendientes */}
-      <div className={`grid gap-4 mb-6 grid-cols-1 sm:grid-cols-2 ${hasTC ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-        {hasTC && (
-          <KPICard title={`TC ${tcType}`} value={`$${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-                   subtitle={`Actualizado: ${tcDate}`} color="blue" />
-        )}
-        <KPICard title="Total a cobrar" value={`$${formatMoney(totalCobrar)}`}
+        <KPICard dark title="Total a cobrar" value={`$${formatMoney(totalCobrar)}`}
                  subtitle={`${allPending.filter(t => t.type === 'income').length} pendiente(s)`}
                  color="yellow"
                  usdValue={hasTC ? `$${toUSD(totalCobrar)}` : undefined} />
-        <KPICard title="Total a pagar" value={`$${formatMoney(totalPagar)}`}
+        <KPICard dark title="Total a pagar" value={`$${formatMoney(totalPagar)}`}
                  subtitle={`${allPending.filter(t => t.type === 'expense').length} pendiente(s)`}
                  color="orange"
                  usdValue={hasTC ? `$${toUSD(totalPagar)}` : undefined} />
       </div>
 
+      {/* TC + Tasa ahorro — fila secundaria compacta */}
+      <div className="flex flex-wrap items-center gap-4 mb-5 px-1">
+        {hasTC && (
+          <span className="text-xs" style={{ color: '#8b8ec0' }}>
+            TC {tcType}: <span className="font-semibold text-white">${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+            <span className="ml-1 opacity-60">({tcDate})</span>
+          </span>
+        )}
+        <span className="text-xs" style={{ color: '#8b8ec0' }}>
+          Tasa de ahorro: <span className="font-semibold" style={{ color: savingsRate >= 20 ? '#2edbc1' : savingsRate >= 0 ? '#f59e0b' : '#fe4962' }}>{savingsRate.toFixed(1)}%</span>
+        </span>
+        <span className="text-xs" style={{ color: '#8b8ec0' }}>
+          Mayor gasto: <span className="font-semibold text-white">{topExpenseCat}</span>
+          <span className="ml-1 opacity-60">(${formatMoney(topExpenseTotal)})</span>
+        </span>
+      </div>
 
       {/* Gráficos */}
       <DashboardCharts monthlyData={monthlyData} categoryData={categoryData} />

@@ -18,7 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <body className={`${inter.className} bg-gray-50 min-h-screen`}>
+      <body className={`${inter.className} min-h-screen`} style={{ background: 'var(--background)' }}>
         <Navbar />
         <main className="container mx-auto px-4 py-6 max-w-7xl">
           {children}

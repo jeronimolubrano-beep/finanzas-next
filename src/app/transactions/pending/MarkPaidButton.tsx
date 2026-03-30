@@ -18,7 +18,8 @@ export function MarkPaidButton({ id, type }: { id: number; type: string }) {
     <button
       onClick={handleClick}
       disabled={loading}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition disabled:opacity-50"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white hover:opacity-90 transition disabled:opacity-50"
+      style={{ background: '#2edbc1' }}
     >
       <CheckCircle className="w-3.5 h-3.5" />
       {loading ? 'Guardando...' : type === 'income' ? 'Cobrado' : 'Pagado'}

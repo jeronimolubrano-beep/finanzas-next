@@ -94,18 +94,19 @@ export default async function CashFlowPage({
       {/* Header + filtros */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Cash Flow</h1>
-          <p className="text-sm text-gray-500">{monthLabel}</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--navy)' }}>Cash Flow</h1>
+          <p className="text-sm" style={{ color: '#8b8ec0' }}>{monthLabel}</p>
         </div>
         <form className="flex flex-wrap items-center gap-2">
           <input type="month" name="month" defaultValue={selectedMonth}
-                 className="border rounded-lg px-3 py-1.5 text-sm" />
+                 className="rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }} />
           <select name="business_id" defaultValue={params.business_id ?? ''}
-                  className="border rounded-lg px-3 py-1.5 text-sm">
+                  className="rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }}>
             <option value="">Todas las empresas</option>
             {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
-          <button type="submit" className="bg-gray-800 text-white px-4 py-1.5 rounded-lg text-sm font-medium">
+          <button type="submit" className="text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:opacity-90 transition"
+                  style={{ background: '#6439ff' }}>
             Filtrar
           </button>
         </form>
@@ -116,22 +117,24 @@ export default async function CashFlowPage({
         <div className="space-y-2 mb-6">
           {overdueCount > 0 && (
             <Link href="/transactions/pending"
-                  className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 hover:bg-red-100 transition">
-              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-              <span className="text-sm text-red-700 font-medium flex-1">
+                  className="flex items-center gap-3 rounded-lg px-4 py-3 hover:opacity-90 transition border"
+                  style={{ background: 'rgba(254,73,98,0.05)', borderColor: 'rgba(254,73,98,0.2)' }}>
+              <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: '#fe4962' }} />
+              <span className="text-sm font-medium flex-1" style={{ color: '#fe4962' }}>
                 Tenés {overdueCount} pago{overdueCount > 1 ? 's' : ''} vencido{overdueCount > 1 ? 's' : ''}
               </span>
-              <span className="text-xs text-red-500">Ver →</span>
+              <span className="text-xs" style={{ color: '#fe4962' }}>Ver →</span>
             </Link>
           )}
           {soonCount > 0 && (
             <Link href="/transactions/pending"
-                  className="flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 hover:bg-yellow-100 transition">
-              <Clock className="w-4 h-4 text-yellow-600 shrink-0" />
-              <span className="text-sm text-yellow-700 font-medium flex-1">
+                  className="flex items-center gap-3 rounded-lg px-4 py-3 hover:opacity-90 transition border"
+                  style={{ background: 'rgba(245,158,11,0.05)', borderColor: 'rgba(245,158,11,0.2)' }}>
+              <Clock className="w-4 h-4 shrink-0 text-yellow-500" />
+              <span className="text-sm font-medium flex-1 text-yellow-600">
                 Tenés {soonCount} pago{soonCount > 1 ? 's' : ''} que vence{soonCount > 1 ? 'n' : ''} esta semana
               </span>
-              <span className="text-xs text-yellow-500">Ver →</span>
+              <span className="text-xs text-yellow-600">Ver →</span>
             </Link>
           )}
         </div>
@@ -182,73 +185,73 @@ export default async function CashFlowPage({
 
       {/* Desglose por categoria */}
       <div className="grid md:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="px-4 py-3 bg-green-50 border-b">
-            <h2 className="font-semibold text-green-700">Ingresos por categoria</h2>
+        <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+          <div className="px-4 py-3 border-b flex items-center gap-2" style={{ background: 'rgba(46,219,193,0.05)', borderColor: '#e8e8f0' }}>
+            <h2 className="font-semibold text-[#2edbc1]">Ingresos por categoria</h2>
           </div>
           <table className="w-full text-sm">
-            <thead className={hasTC ? 'bg-gray-50 text-gray-500 text-xs' : ''}>
+            <thead style={{ background: '#f4f4ff' }}>
               {hasTC && (
                 <tr>
-                  <th className="px-4 py-1 text-left"></th>
-                  <th className="px-4 py-1 text-right">ARS</th>
-                  <th className="px-4 py-1 text-right">USD</th>
+                  <th className="px-4 py-1 text-left text-xs" style={{ color: '#8b8ec0' }}></th>
+                  <th className="px-4 py-1 text-right text-xs" style={{ color: '#8b8ec0' }}>ARS</th>
+                  <th className="px-4 py-1 text-right text-xs" style={{ color: '#8b8ec0' }}>USD</th>
                 </tr>
               )}
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y" style={{ borderColor: '#f0f0f8' }}>
               {incomeByCategory.map(c => (
-                <tr key={c.name}>
-                  <td className="px-4 py-2">{c.name}</td>
-                  <td className="px-4 py-2 text-right font-semibold text-green-600">${formatMoney(c.total)}</td>
-                  {hasTC && <td className="px-4 py-2 text-right text-xs text-gray-400">${toUSD(c.total)}</td>}
+                <tr key={c.name} className="hover:bg-[#f9f9ff]">
+                  <td className="px-4 py-2" style={{ color: 'var(--navy)' }}>{c.name}</td>
+                  <td className="px-4 py-2 text-right font-semibold text-[#2edbc1]">${formatMoney(c.total)}</td>
+                  {hasTC && <td className="px-4 py-2 text-right text-xs" style={{ color: '#8b8ec0' }}>${toUSD(c.total)}</td>}
                 </tr>
               ))}
               {incomeByCategory.length === 0 && (
-                <tr><td colSpan={hasTC ? 3 : 2} className="px-4 py-4 text-center text-gray-400">Sin ingresos</td></tr>
+                <tr><td colSpan={hasTC ? 3 : 2} className="px-4 py-4 text-center" style={{ color: '#8b8ec0' }}>Sin ingresos</td></tr>
               )}
             </tbody>
-            <tfoot className="border-t bg-gray-50">
+            <tfoot className="border-t" style={{ background: '#f4f4ff', borderColor: '#e8e8f0' }}>
               <tr>
-                <td className="px-4 py-2 font-bold">Total</td>
-                <td className="px-4 py-2 text-right font-bold text-green-600">${formatMoney(dIncome)}</td>
-                {hasTC && <td className="px-4 py-2 text-right font-bold text-xs text-gray-500">${toUSD(dIncome)}</td>}
+                <td className="px-4 py-2 font-bold" style={{ color: 'var(--navy)' }}>Total</td>
+                <td className="px-4 py-2 text-right font-bold text-[#2edbc1]">${formatMoney(dIncome)}</td>
+                {hasTC && <td className="px-4 py-2 text-right font-bold text-xs" style={{ color: '#8b8ec0' }}>${toUSD(dIncome)}</td>}
               </tr>
             </tfoot>
           </table>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="px-4 py-3 bg-red-50 border-b">
-            <h2 className="font-semibold text-red-700">Gastos por categoria</h2>
+        <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+          <div className="px-4 py-3 border-b flex items-center gap-2" style={{ background: 'rgba(254,73,98,0.05)', borderColor: '#e8e8f0' }}>
+            <h2 className="font-semibold text-[#fe4962]">Gastos por categoria</h2>
           </div>
           <table className="w-full text-sm">
-            <thead className={hasTC ? 'bg-gray-50 text-gray-500 text-xs' : ''}>
+            <thead style={{ background: '#f4f4ff' }}>
               {hasTC && (
                 <tr>
-                  <th className="px-4 py-1 text-left"></th>
-                  <th className="px-4 py-1 text-right">ARS</th>
-                  <th className="px-4 py-1 text-right">USD</th>
+                  <th className="px-4 py-1 text-left text-xs" style={{ color: '#8b8ec0' }}></th>
+                  <th className="px-4 py-1 text-right text-xs" style={{ color: '#8b8ec0' }}>ARS</th>
+                  <th className="px-4 py-1 text-right text-xs" style={{ color: '#8b8ec0' }}>USD</th>
                 </tr>
               )}
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y" style={{ borderColor: '#f0f0f8' }}>
               {expenseByCategory.map(c => (
-                <tr key={c.name}>
-                  <td className="px-4 py-2">{c.name}</td>
-                  <td className="px-4 py-2 text-right font-semibold text-red-600">${formatMoney(c.total)}</td>
-                  {hasTC && <td className="px-4 py-2 text-right text-xs text-gray-400">${toUSD(c.total)}</td>}
+                <tr key={c.name} className="hover:bg-[#f9f9ff]">
+                  <td className="px-4 py-2" style={{ color: 'var(--navy)' }}>{c.name}</td>
+                  <td className="px-4 py-2 text-right font-semibold text-[#fe4962]">${formatMoney(c.total)}</td>
+                  {hasTC && <td className="px-4 py-2 text-right text-xs" style={{ color: '#8b8ec0' }}>${toUSD(c.total)}</td>}
                 </tr>
               ))}
               {expenseByCategory.length === 0 && (
-                <tr><td colSpan={hasTC ? 3 : 2} className="px-4 py-4 text-center text-gray-400">Sin gastos</td></tr>
+                <tr><td colSpan={hasTC ? 3 : 2} className="px-4 py-4 text-center" style={{ color: '#8b8ec0' }}>Sin gastos</td></tr>
               )}
             </tbody>
-            <tfoot className="border-t bg-gray-50">
+            <tfoot className="border-t" style={{ background: '#f4f4ff', borderColor: '#e8e8f0' }}>
               <tr>
-                <td className="px-4 py-2 font-bold">Total</td>
-                <td className="px-4 py-2 text-right font-bold text-red-600">${formatMoney(dExpense)}</td>
-                {hasTC && <td className="px-4 py-2 text-right font-bold text-xs text-gray-500">${toUSD(dExpense)}</td>}
+                <td className="px-4 py-2 font-bold" style={{ color: 'var(--navy)' }}>Total</td>
+                <td className="px-4 py-2 text-right font-bold text-[#fe4962]">${formatMoney(dExpense)}</td>
+                {hasTC && <td className="px-4 py-2 text-right font-bold text-xs" style={{ color: '#8b8ec0' }}>${toUSD(dExpense)}</td>}
               </tr>
             </tfoot>
           </table>
@@ -256,33 +259,33 @@ export default async function CashFlowPage({
       </div>
 
       {/* Detalle de transacciones */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b bg-gray-50">
-          <h2 className="font-semibold text-gray-700">Detalle de transacciones</h2>
+      <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+        <div className="px-4 py-3 border-b" style={{ background: '#f4f4ff', borderColor: '#e8e8f0' }}>
+          <h2 className="font-semibold" style={{ color: 'var(--navy)' }}>Detalle de transacciones</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+            <thead style={{ background: '#f4f4ff' }}>
               <tr>
-                <th className="px-4 py-3 text-left">Fecha</th>
-                <th className="px-4 py-3 text-left">Descripcion</th>
-                <th className="px-4 py-3 text-left">Categoria</th>
-                <th className="px-4 py-3 text-right">Monto</th>
-                <th className="px-4 py-3 text-center">Estado</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Fecha</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Descripcion</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Categoria</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Monto</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Estado</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y" style={{ borderColor: '#f0f0f8' }}>
               {txs.map(t => (
-                <tr key={t.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 text-gray-500">{formatDateAR(t.date)}</td>
-                  <td className="px-4 py-2">{t.description}</td>
-                  <td className="px-4 py-2 text-gray-500">{(t.categories as unknown as { name: string } | null)?.name ?? '—'}</td>
-                  <td className={`px-4 py-2 text-right font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                <tr key={t.id} className="hover:bg-[#f9f9ff]">
+                  <td className="px-4 py-2" style={{ color: '#8b8ec0' }}>{formatDateAR(t.date)}</td>
+                  <td className="px-4 py-2" style={{ color: 'var(--navy)' }}>{t.description}</td>
+                  <td className="px-4 py-2" style={{ color: '#8b8ec0' }}>{(t.categories as unknown as { name: string } | null)?.name ?? '—'}</td>
+                  <td className={`px-4 py-2 text-right font-semibold ${t.type === 'income' ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
                     {t.type === 'income' ? '+' : '-'}${formatMoney(Number(t.amount))}
                   </td>
                   <td className="px-4 py-2 text-center">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      t.status === 'devengado' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
+                      t.status === 'devengado' ? 'bg-yellow-600/15 text-yellow-600' : 'bg-[#2edbc1]/15 text-[#2edbc1]'
                     }`}>
                       {statusLabel(t.status, t.type)}
                     </span>
@@ -291,7 +294,7 @@ export default async function CashFlowPage({
               ))}
               {txs.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={5} className="px-4 py-12 text-center" style={{ color: '#8b8ec0' }}>
                     No hay transacciones en este periodo
                   </td>
                 </tr>

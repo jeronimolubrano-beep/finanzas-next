@@ -17,7 +17,6 @@ export default async function PendingPage() {
 
   const txs = pending ?? []
 
-  // Tipo de cambio
   const { data: settings } = await supabase.from('settings').select('*')
   const settingsMap: Record<string, string> = {}
   for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
@@ -31,31 +30,30 @@ export default async function PendingPage() {
 
   const cobrar = txs.filter(t => t.type === 'income')
   const pagar = txs.filter(t => t.type === 'expense')
-
   const totalCobrar = cobrar.reduce((s, t) => s + Number(t.amount), 0)
   const totalPagar = pagar.reduce((s, t) => s + Number(t.amount), 0)
 
-  // Urgency counts
   const today = new Date().toISOString().slice(0, 10)
   const overdueCount = txs.filter(t => t.due_date && t.due_date < today).length
   const soonCount = txs.filter(t => t.due_date && t.due_date >= today && daysUntilDue(t.due_date) <= 7).length
 
   function UrgencyBadge({ dueDate }: { dueDate: string | null }) {
-    if (!dueDate) return <span className="text-xs text-gray-400">Sin vencimiento</span>
+    if (!dueDate) return <span className="text-xs" style={{ color: '#8b8ec0' }}>Sin vencimiento</span>
     const urgency = dueDateUrgency(dueDate)
     const days = daysUntilDue(dueDate)
-    const colorClass = urgency === 'overdue'
-      ? 'bg-red-100 text-red-700 border border-red-200'
-      : urgency === 'soon'
-      ? 'bg-yellow-100 text-yellow-700 border border-yellow-200'
-      : 'bg-green-100 text-green-700 border border-green-200'
+    const bg = urgency === 'overdue' ? 'rgba(254,73,98,0.1)'
+      : urgency === 'soon' ? 'rgba(245,158,11,0.1)'
+      : 'rgba(46,219,193,0.1)'
+    const color = urgency === 'overdue' ? '#fe4962'
+      : urgency === 'soon' ? '#f59e0b'
+      : '#2edbc1'
     const label = days < 0
       ? `Vencido hace ${Math.abs(days)}d`
       : days === 0
       ? 'Vence hoy'
       : `Vence en ${days}d`
     return (
-      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>
+      <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: bg, color }}>
         {formatDateShort(dueDate)} · {label}
       </span>
     )
@@ -72,23 +70,24 @@ export default async function PendingPage() {
   }) {
     if (items.length === 0) {
       return (
-        <div className="px-4 py-8 text-center text-gray-400 text-sm">
-          <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+        <div className="px-4 py-8 text-center text-sm" style={{ color: '#8b8ec0' }}>
+          <CheckCircle2 className="w-8 h-8 mx-auto mb-2" style={{ color: '#c8cce0' }} />
           No hay pendientes en esta sección
         </div>
       )
     }
 
     return (
-      <div className="divide-y">
+      <div className="divide-y" style={{ borderColor: '#f0f0f8' }}>
         {items.map(t => {
           const urgency = dueDateUrgency(t.due_date)
-          const rowBg = urgency === 'overdue' ? 'bg-red-50/40' : ''
+          const rowBg = urgency === 'overdue' ? 'rgba(254,73,98,0.03)' : ''
           return (
-            <div key={t.id} className={`px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 hover:bg-gray-50 transition ${rowBg}`}>
+            <div key={t.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 hover:bg-[#f9f9ff] transition"
+                 style={{ background: rowBg }}>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-800 truncate">{t.description}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="font-medium truncate" style={{ color: 'var(--navy)' }}>{t.description}</p>
+                <p className="text-xs mt-0.5" style={{ color: '#8b8ec0' }}>
                   {(t.categories as { name: string } | null)?.name ?? '—'} · {(t.businesses as { name: string } | null)?.name ?? '—'}
                 </p>
                 <div className="mt-1">
@@ -97,11 +96,11 @@ export default async function PendingPage() {
               </div>
               <div className="flex items-center gap-3 sm:ml-auto">
                 <div className="text-right shrink-0">
-                  <p className={`font-bold text-sm ${color === 'green' ? 'text-green-600' : 'text-red-600'}`}>
+                  <p className={`font-bold text-sm ${color === 'green' ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
                     {sign}${formatMoney(Number(t.amount))}
                   </p>
                   {hasTC && (
-                    <p className="text-xs text-gray-400">USD ${toUSD(Number(t.amount))}</p>
+                    <p className="text-xs" style={{ color: '#8b8ec0' }}>USD ${toUSD(Number(t.amount))}</p>
                   )}
                 </div>
                 <div className="shrink-0">
@@ -120,11 +119,11 @@ export default async function PendingPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Pagos Pendientes</h1>
-          <p className="text-sm text-gray-500">{txs.length} pendiente(s) en total</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--navy)' }}>Pagos Pendientes</h1>
+          <p className="text-sm" style={{ color: '#8b8ec0' }}>{txs.length} pendiente(s) en total</p>
         </div>
         <Link href="/transactions"
-              className="text-sm text-blue-600 hover:text-blue-800 transition">
+              className="text-sm hover:opacity-70 transition" style={{ color: '#6439ff' }}>
           ← Ver todas las transacciones
         </Link>
       </div>
@@ -133,17 +132,19 @@ export default async function PendingPage() {
       {(overdueCount > 0 || soonCount > 0) && (
         <div className="space-y-2 mb-6">
           {overdueCount > 0 && (
-            <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-              <span className="text-sm text-red-700 font-medium">
+            <div className="flex items-center gap-2 rounded-lg px-4 py-3 border"
+                 style={{ background: 'rgba(254,73,98,0.05)', borderColor: 'rgba(254,73,98,0.2)' }}>
+              <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: '#fe4962' }} />
+              <span className="text-sm font-medium" style={{ color: '#fe4962' }}>
                 {overdueCount} pago{overdueCount > 1 ? 's' : ''} vencido{overdueCount > 1 ? 's' : ''}
               </span>
             </div>
           )}
           {soonCount > 0 && (
-            <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3">
-              <Clock className="w-4 h-4 text-yellow-600 shrink-0" />
-              <span className="text-sm text-yellow-700 font-medium">
+            <div className="flex items-center gap-2 rounded-lg px-4 py-3 border"
+                 style={{ background: 'rgba(245,158,11,0.05)', borderColor: 'rgba(245,158,11,0.2)' }}>
+              <Clock className="w-4 h-4 shrink-0 text-yellow-500" />
+              <span className="text-sm font-medium text-yellow-600">
                 {soonCount} pago{soonCount > 1 ? 's' : ''} vence{soonCount > 1 ? 'n' : ''} esta semana
               </span>
             </div>
@@ -153,40 +154,40 @@ export default async function PendingPage() {
 
       {/* Resumen totales */}
       <div className="grid grid-cols-2 gap-4 mb-6">
-        <div className="bg-white rounded-xl shadow-sm border-l-4 border-l-green-500 p-4">
+        <div className="rounded-xl border p-4" style={{ background: 'var(--card-bg)', borderLeft: '3px solid #2edbc1', borderColor: '#e8e8f0', borderLeftColor: '#2edbc1' }}>
           <div className="flex items-center gap-2 mb-1">
-            <TrendingUp className="w-4 h-4 text-green-600" />
-            <span className="text-sm text-gray-500">Total a cobrar</span>
+            <TrendingUp className="w-4 h-4 text-[#2edbc1]" />
+            <span className="text-sm" style={{ color: '#8b8ec0' }}>Total a cobrar</span>
           </div>
-          <p className="text-xl font-bold text-green-600">${formatMoney(totalCobrar)}</p>
-          {hasTC && <p className="text-xs text-blue-500 mt-0.5">USD ${toUSD(totalCobrar)}</p>}
-          <p className="text-xs text-gray-400 mt-1">{cobrar.length} item(s)</p>
+          <p className="text-xl font-bold text-[#2edbc1]">${formatMoney(totalCobrar)}</p>
+          {hasTC && <p className="text-xs mt-0.5" style={{ color: '#6439ff' }}>USD ${toUSD(totalCobrar)}</p>}
+          <p className="text-xs mt-1" style={{ color: '#8b8ec0' }}>{cobrar.length} item(s)</p>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border-l-4 border-l-red-500 p-4">
+        <div className="rounded-xl border p-4" style={{ background: 'var(--card-bg)', borderLeft: '3px solid #fe4962', borderColor: '#e8e8f0', borderLeftColor: '#fe4962' }}>
           <div className="flex items-center gap-2 mb-1">
-            <TrendingDown className="w-4 h-4 text-red-600" />
-            <span className="text-sm text-gray-500">Total a pagar</span>
+            <TrendingDown className="w-4 h-4 text-[#fe4962]" />
+            <span className="text-sm" style={{ color: '#8b8ec0' }}>Total a pagar</span>
           </div>
-          <p className="text-xl font-bold text-red-600">${formatMoney(totalPagar)}</p>
-          {hasTC && <p className="text-xs text-blue-500 mt-0.5">USD ${toUSD(totalPagar)}</p>}
-          <p className="text-xs text-gray-400 mt-1">{pagar.length} item(s)</p>
+          <p className="text-xl font-bold text-[#fe4962]">${formatMoney(totalPagar)}</p>
+          {hasTC && <p className="text-xs mt-0.5" style={{ color: '#6439ff' }}>USD ${toUSD(totalPagar)}</p>}
+          <p className="text-xs mt-1" style={{ color: '#8b8ec0' }}>{pagar.length} item(s)</p>
         </div>
       </div>
 
       {/* Tabla A cobrar */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-6">
-        <div className="px-4 py-3 bg-green-50 border-b flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-green-700" />
-          <h2 className="font-semibold text-green-700">A cobrar ({cobrar.length})</h2>
+      <div className="rounded-xl border overflow-hidden mb-6" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+        <div className="px-4 py-3 border-b flex items-center gap-2" style={{ background: 'rgba(46,219,193,0.05)', borderColor: '#e8e8f0' }}>
+          <TrendingUp className="w-4 h-4 text-[#2edbc1]" />
+          <h2 className="font-semibold text-[#2edbc1]">A cobrar ({cobrar.length})</h2>
         </div>
         <PendingTable items={cobrar} color="green" sign="+" />
       </div>
 
       {/* Tabla A pagar */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="px-4 py-3 bg-red-50 border-b flex items-center gap-2">
-          <TrendingDown className="w-4 h-4 text-red-700" />
-          <h2 className="font-semibold text-red-700">A pagar ({pagar.length})</h2>
+      <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+        <div className="px-4 py-3 border-b flex items-center gap-2" style={{ background: 'rgba(254,73,98,0.05)', borderColor: '#e8e8f0' }}>
+          <TrendingDown className="w-4 h-4 text-[#fe4962]" />
+          <h2 className="font-semibold text-[#fe4962]">A pagar ({pagar.length})</h2>
         </div>
         <PendingTable items={pagar} color="red" sign="-" />
       </div>

@@ -13,7 +13,6 @@ export default async function IncomeStatementPage({
   const currentYear = new Date().getFullYear()
   const selectedYear = parseInt(params.year || String(currentYear))
 
-  // Query todas las transacciones del anio
   let query = supabase
     .from('transactions')
     .select('date, type, amount')
@@ -26,11 +25,8 @@ export default async function IncomeStatementPage({
 
   const { data: transactions } = await query
   const txs = transactions ?? []
-
-  // Empresas para filtro
   const { data: businesses } = await supabase.from('businesses').select('*').order('name')
 
-  // Tipo de cambio
   const { data: settings } = await supabase.from('settings').select('*')
   const settingsMap: Record<string, string> = {}
   for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
@@ -43,7 +39,6 @@ export default async function IncomeStatementPage({
     return (ars / tcRate).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   }
 
-  // Agrupar por mes
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
   const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
@@ -58,13 +53,10 @@ export default async function IncomeStatementPage({
     return { income, expense, net, savingsRate }
   })
 
-  // Totales anuales
   const totalIncome = monthlyData.reduce((s, m) => s + m.income, 0)
   const totalExpense = monthlyData.reduce((s, m) => s + m.expense, 0)
   const totalNet = totalIncome - totalExpense
   const totalSavingsRate = totalIncome > 0 ? (totalNet / totalIncome * 100) : 0
-
-  // Anios disponibles (ultimos 5)
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i)
 
   return (
@@ -72,103 +64,89 @@ export default async function IncomeStatementPage({
       {/* Header + filtros */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Estado de Resultados</h1>
-          <p className="text-sm text-gray-500">Anio {selectedYear}</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--navy)' }}>Estado de Resultados</h1>
+          <p className="text-sm" style={{ color: '#8b8ec0' }}>Anio {selectedYear}</p>
         </div>
         <form className="flex flex-wrap items-center gap-2">
           <select name="year" defaultValue={selectedYear}
-                  className="border rounded-lg px-3 py-1.5 text-sm">
+                  className="rounded-lg px-3 py-1.5 text-sm border"
+                  style={{ borderColor: '#e8e8f0' }}>
             {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <select name="business_id" defaultValue={params.business_id ?? ''}
-                  className="border rounded-lg px-3 py-1.5 text-sm">
+                  className="rounded-lg px-3 py-1.5 text-sm border"
+                  style={{ borderColor: '#e8e8f0' }}>
             <option value="">Todas las empresas</option>
             {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
-          <button type="submit" className="bg-gray-800 text-white px-4 py-1.5 rounded-lg text-sm font-medium">
+          <button type="submit" className="text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:opacity-90 transition"
+                  style={{ background: '#6439ff' }}>
             Filtrar
           </button>
         </form>
       </div>
 
       {/* Tabla anual */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-              <tr>
-                <th className="px-4 py-3 text-left sticky left-0 bg-gray-50 z-10">Concepto</th>
+            <thead>
+              <tr style={{ background: '#f4f4ff' }}>
+                <th className="px-4 py-3 text-left sticky left-0 z-10 text-xs font-semibold uppercase" style={{ background: '#f4f4ff', color: '#8b8ec0' }}>Concepto</th>
                 {monthNames.map(m => (
-                  <th key={m} className="px-3 py-3 text-right min-w-[90px]">{m}</th>
+                  <th key={m} className="px-3 py-3 text-right min-w-[90px] text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>{m}</th>
                 ))}
-                <th className="px-4 py-3 text-right bg-gray-100 font-bold min-w-[100px]">TOTAL</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase" style={{ background: '#f0f0f8', color: '#8b8ec0' }}>TOTAL</th>
               </tr>
             </thead>
             <tbody>
-              {/* Ingresos */}
-              <tr className="border-b bg-green-50/50">
-                <td className="px-4 py-3 font-semibold text-green-700 sticky left-0 bg-green-50/50 z-10">
-                  Total Ingresos
-                </td>
+              <tr style={{ background: 'rgba(46,219,193,0.03)' }}>
+                <td className="px-4 py-3 font-semibold text-[#2edbc1] sticky left-0 z-10" style={{ background: 'rgba(46,219,193,0.03)' }}>Total Ingresos</td>
                 {monthlyData.map((m, i) => (
-                  <td key={i} className="px-3 py-3 text-right text-green-600 font-medium">
+                  <td key={i} className="px-3 py-3 text-right font-medium text-[#2edbc1]">
                     {m.income > 0 ? `$${formatMoney0(m.income)}` : '—'}
                   </td>
                 ))}
-                <td className="px-4 py-3 text-right font-bold text-green-700 bg-green-50">
+                <td className="px-4 py-3 text-right font-bold text-[#2edbc1]" style={{ background: 'rgba(46,219,193,0.05)' }}>
                   ${formatMoney0(totalIncome)}
                 </td>
               </tr>
 
-              {/* Gastos */}
-              <tr className="border-b bg-red-50/50">
-                <td className="px-4 py-3 font-semibold text-red-700 sticky left-0 bg-red-50/50 z-10">
-                  Total Gastos
-                </td>
+              <tr style={{ background: 'rgba(254,73,98,0.03)' }}>
+                <td className="px-4 py-3 font-semibold text-[#fe4962] sticky left-0 z-10" style={{ background: 'rgba(254,73,98,0.03)' }}>Total Gastos</td>
                 {monthlyData.map((m, i) => (
-                  <td key={i} className="px-3 py-3 text-right text-red-600 font-medium">
+                  <td key={i} className="px-3 py-3 text-right font-medium text-[#fe4962]">
                     {m.expense > 0 ? `$${formatMoney0(m.expense)}` : '—'}
                   </td>
                 ))}
-                <td className="px-4 py-3 text-right font-bold text-red-700 bg-red-50">
+                <td className="px-4 py-3 text-right font-bold text-[#fe4962]" style={{ background: 'rgba(254,73,98,0.05)' }}>
                   ${formatMoney0(totalExpense)}
                 </td>
               </tr>
 
-              {/* Resultado Neto */}
-              <tr className="border-b-2 border-gray-300">
-                <td className="px-4 py-3 font-bold text-gray-800 sticky left-0 bg-white z-10">
-                  Resultado Neto
-                </td>
+              <tr style={{ borderBottom: '2px solid #e8e8f0' }}>
+                <td className="px-4 py-3 font-bold sticky left-0 z-10" style={{ color: 'var(--navy)' }}>Resultado Neto</td>
                 {monthlyData.map((m, i) => (
-                  <td key={i} className={`px-3 py-3 text-right font-bold ${
-                    m.net >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
+                  <td key={i} className={`px-3 py-3 text-right font-bold ${m.net >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
                     {(m.income > 0 || m.expense > 0) ? `${m.net >= 0 ? '+' : ''}$${formatMoney0(m.net)}` : '—'}
                   </td>
                 ))}
-                <td className={`px-4 py-3 text-right font-bold bg-gray-50 ${
-                  totalNet >= 0 ? 'text-green-700' : 'text-red-700'
-                }`}>
+                <td className={`px-4 py-3 text-right font-bold ${totalNet >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`} style={{ background: '#f4f4ff' }}>
                   {totalNet >= 0 ? '+' : ''}${formatMoney0(totalNet)}
                 </td>
               </tr>
 
-              {/* Tasa de ahorro */}
               <tr>
-                <td className="px-4 py-3 font-medium text-gray-600 sticky left-0 bg-white z-10">
-                  Tasa de Ahorro
-                </td>
-                {monthlyData.map((m, i) => (
-                  <td key={i} className={`px-3 py-3 text-right text-sm ${
-                    m.savingsRate >= 20 ? 'text-green-600' : m.savingsRate >= 0 ? 'text-yellow-600' : 'text-red-600'
-                  }`}>
-                    {m.income > 0 ? `${m.savingsRate.toFixed(0)}%` : '—'}
-                  </td>
-                ))}
-                <td className={`px-4 py-3 text-right font-bold bg-gray-50 ${
-                  totalSavingsRate >= 20 ? 'text-green-700' : totalSavingsRate >= 0 ? 'text-yellow-700' : 'text-red-700'
-                }`}>
+                <td className="px-4 py-3 font-medium sticky left-0 z-10" style={{ color: '#8b8ec0' }}>Tasa de Ahorro</td>
+                {monthlyData.map((m, i) => {
+                  const color = m.savingsRate >= 20 ? '#2edbc1' : m.savingsRate >= 0 ? '#f59e0b' : '#fe4962'
+                  return (
+                    <td key={i} className="px-3 py-3 text-right text-sm" style={{ color }}>
+                      {m.income > 0 ? `${m.savingsRate.toFixed(0)}%` : '—'}
+                    </td>
+                  )
+                })}
+                <td className="px-4 py-3 text-right font-bold" style={{ background: '#f4f4ff', color: totalSavingsRate >= 20 ? '#2edbc1' : totalSavingsRate >= 0 ? '#f59e0b' : '#fe4962' }}>
                   {totalSavingsRate.toFixed(1)}%
                 </td>
               </tr>
@@ -179,25 +157,23 @@ export default async function IncomeStatementPage({
 
       {/* Resumen anual */}
       <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow-sm p-4 text-center">
-          <p className="text-xs text-gray-500 uppercase mb-1">Ingresos {selectedYear}</p>
-          <p className="text-xl font-bold text-green-600">${formatMoney0(totalIncome)}</p>
+        <div className="rounded-xl border p-4 text-center" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+          <p className="text-xs uppercase mb-1" style={{ color: '#8b8ec0' }}>Ingresos {selectedYear}</p>
+          <p className="text-xl font-bold text-[#2edbc1]">${formatMoney0(totalIncome)}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm p-4 text-center">
-          <p className="text-xs text-gray-500 uppercase mb-1">Gastos {selectedYear}</p>
-          <p className="text-xl font-bold text-red-600">${formatMoney0(totalExpense)}</p>
+        <div className="rounded-xl border p-4 text-center" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+          <p className="text-xs uppercase mb-1" style={{ color: '#8b8ec0' }}>Gastos {selectedYear}</p>
+          <p className="text-xl font-bold text-[#fe4962]">${formatMoney0(totalExpense)}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm p-4 text-center">
-          <p className="text-xs text-gray-500 uppercase mb-1">Resultado Neto</p>
-          <p className={`text-xl font-bold ${totalNet >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+        <div className="rounded-xl border p-4 text-center" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+          <p className="text-xs uppercase mb-1" style={{ color: '#8b8ec0' }}>Resultado Neto</p>
+          <p className={`text-xl font-bold ${totalNet >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
             {totalNet >= 0 ? '+' : ''}${formatMoney0(totalNet)}
           </p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm p-4 text-center">
-          <p className="text-xs text-gray-500 uppercase mb-1">Tasa de Ahorro</p>
-          <p className={`text-xl font-bold ${
-            totalSavingsRate >= 20 ? 'text-green-600' : totalSavingsRate >= 0 ? 'text-yellow-600' : 'text-red-600'
-          }`}>
+        <div className="rounded-xl border p-4 text-center" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+          <p className="text-xs uppercase mb-1" style={{ color: '#8b8ec0' }}>Tasa de Ahorro</p>
+          <p className={`text-xl font-bold ${totalSavingsRate >= 20 ? 'text-[#2edbc1]' : totalSavingsRate >= 0 ? 'text-yellow-500' : 'text-[#fe4962]'}`}>
             {totalSavingsRate.toFixed(1)}%
           </p>
         </div>
@@ -205,26 +181,26 @@ export default async function IncomeStatementPage({
 
       {/* Equivalente en USD */}
       {hasTC && (
-        <div className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-5">
+        <div className="mt-6 rounded-xl border p-5" style={{ background: 'rgba(100,57,255,0.05)', borderColor: 'rgba(100,57,255,0.2)' }}>
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            <DollarSign className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-semibold text-blue-700">Resumen anual en USD</span>
-            <span className="text-xs text-blue-400 sm:ml-auto">
+            <DollarSign className="w-4 h-4" style={{ color: '#6439ff' }} />
+            <span className="text-sm font-semibold" style={{ color: '#6439ff' }}>Resumen anual en USD</span>
+            <span className="text-xs sm:ml-auto" style={{ color: '#8b8ec0' }}>
               TC: ${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })} ({tcType}) al {tcDate}
             </span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <p className="text-xs text-blue-400">Ingresos {selectedYear}</p>
-              <p className="text-lg font-bold text-green-600">USD ${toUSD(totalIncome)}</p>
+              <p className="text-xs" style={{ color: '#8b8ec0' }}>Ingresos {selectedYear}</p>
+              <p className="text-lg font-bold text-[#2edbc1]">USD ${toUSD(totalIncome)}</p>
             </div>
             <div>
-              <p className="text-xs text-blue-400">Gastos {selectedYear}</p>
-              <p className="text-lg font-bold text-red-500">USD ${toUSD(totalExpense)}</p>
+              <p className="text-xs" style={{ color: '#8b8ec0' }}>Gastos {selectedYear}</p>
+              <p className="text-lg font-bold text-[#fe4962]">USD ${toUSD(totalExpense)}</p>
             </div>
             <div>
-              <p className="text-xs text-blue-400">Resultado Neto</p>
-              <p className={`text-lg font-bold ${totalNet >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+              <p className="text-xs" style={{ color: '#8b8ec0' }}>Resultado Neto</p>
+              <p className={`text-lg font-bold ${totalNet >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
                 USD {totalNet >= 0 ? '+' : ''}${toUSD(Math.abs(totalNet))}
               </p>
             </div>

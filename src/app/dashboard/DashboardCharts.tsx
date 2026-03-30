@@ -2,7 +2,8 @@
 
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, PieChart, Pie, Cell
+  ResponsiveContainer, PieChart, Pie, Cell,
+  Area, AreaChart
 } from 'recharts'
 
 interface MonthlyData {
@@ -22,7 +23,7 @@ interface Props {
   categoryData: CategoryData[]
 }
 
-const COLORS = ['#3b82f6', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#f97316', '#06b6d4', '#ec4899']
+const COLORS = ['#6439ff', '#2edbc1', '#fe4962', '#f59e0b', '#8b6fff', '#06b6d4', '#f97316', '#ec4899']
 
 function formatTooltip(value: unknown): string {
   const n = Number(value)
@@ -35,30 +36,42 @@ function formatARS(value: number): string {
   return `$${value.toFixed(0)}`
 }
 
+const darkTooltipStyle = {
+  backgroundColor: '#232a5c',
+  border: '1px solid #333b72',
+  borderRadius: '8px',
+  color: '#d0d4f0',
+  fontSize: '12px',
+}
+
 export function DashboardCharts({ monthlyData, categoryData }: Props) {
   return (
-    <div className="grid lg:grid-cols-3 gap-6 mt-6">
+    <div className="grid lg:grid-cols-3 gap-5 mt-6">
       {/* Grafico de barras — Ingresos vs Gastos */}
-      <div className="lg:col-span-2 bg-white rounded-lg shadow-sm p-4">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Ingresos vs Gastos por mes</h2>
+      <div className="lg:col-span-2 rounded-xl p-5 border"
+           style={{ background: 'var(--dash-card)', borderColor: 'var(--dash-border)' }}>
+        <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--dash-text)' }}>
+          Ingresos vs Gastos por mes
+        </h2>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={monthlyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-            <YAxis tickFormatter={formatARS} tick={{ fontSize: 11 }} width={55} />
-            <Tooltip
-              formatter={formatTooltip}
-            />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="ingresos" name="Ingresos" fill="#22c55e" radius={[3, 3, 0, 0]} />
-            <Bar dataKey="gastos" name="Gastos" fill="#ef4444" radius={[3, 3, 0, 0]} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--dash-border)" />
+            <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#8b8ec0' }} axisLine={{ stroke: '#252966' }} tickLine={false} />
+            <YAxis tickFormatter={formatARS} tick={{ fontSize: 11, fill: '#8b8ec0' }} axisLine={{ stroke: '#252966' }} tickLine={false} width={55} />
+            <Tooltip contentStyle={darkTooltipStyle} cursor={{ fill: 'rgba(100,57,255,0.1)' }} />
+            <Legend wrapperStyle={{ fontSize: 12, color: '#8b8ec0' }} />
+            <Bar dataKey="ingresos" name="Ingresos" fill="#2edbc1" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="gastos" name="Gastos" fill="#fe4962" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
       {/* Grafico de torta — Gastos por categoria */}
-      <div className="bg-white rounded-lg shadow-sm p-4">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Gastos por categoria</h2>
+      <div className="rounded-xl p-5 border"
+           style={{ background: 'var(--dash-card)', borderColor: 'var(--dash-border)' }}>
+        <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--dash-text)' }}>
+          Gastos por categoria
+        </h2>
         {categoryData.length > 0 ? (
           <>
             <ResponsiveContainer width="100%" height={180}>
@@ -71,59 +84,65 @@ export function DashboardCharts({ monthlyData, categoryData }: Props) {
                   outerRadius={80}
                   paddingAngle={2}
                   dataKey="value"
+                  stroke="var(--dash-bg)"
+                  strokeWidth={2}
                 >
                   {categoryData.map((_, index) => (
                     <Cell key={index} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={formatTooltip} />
+                <Tooltip contentStyle={darkTooltipStyle} />
               </PieChart>
             </ResponsiveContainer>
-            <div className="space-y-1 mt-2">
+            <div className="space-y-1.5 mt-3">
               {categoryData.slice(0, 5).map((c, i) => (
                 <div key={c.name} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                           style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                    <span className="text-gray-600 truncate max-w-[110px]">{c.name}</span>
+                    <span className="truncate max-w-[110px]" style={{ color: '#8b8ec0' }}>{c.name}</span>
                   </div>
-                  <span className="text-gray-500 font-medium">{formatARS(c.value)}</span>
+                  <span className="font-semibold" style={{ color: 'var(--dash-text)' }}>{formatARS(c.value)}</span>
                 </div>
               ))}
             </div>
           </>
         ) : (
-          <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
+          <div className="flex items-center justify-center h-40 text-sm" style={{ color: '#5b5c8c' }}>
             Sin datos de gastos
           </div>
         )}
       </div>
 
-      {/* Grafico de linea — Flujo neto */}
-      <div className="lg:col-span-3 bg-white rounded-lg shadow-sm p-4">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Flujo neto mensual</h2>
+      {/* Grafico — Flujo neto (línea) */}
+      <div className="lg:col-span-3 rounded-xl p-5 border"
+           style={{ background: 'var(--dash-card)', borderColor: 'var(--dash-border)' }}>
+        <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--dash-text)' }}>
+          Flujo neto mensual
+        </h2>
         <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={monthlyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-            <YAxis tickFormatter={formatARS} tick={{ fontSize: 11 }} width={55} />
-            <Tooltip
-              formatter={formatTooltip}
-            />
-            <Bar
+          <AreaChart data={monthlyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="netoGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#6439ff" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="#6439ff" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--dash-border)" />
+            <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#8b8ec0' }} axisLine={{ stroke: 'var(--dash-border)' }} tickLine={false} />
+            <YAxis tickFormatter={formatARS} tick={{ fontSize: 11, fill: '#8b8ec0' }} axisLine={{ stroke: 'var(--dash-border)' }} tickLine={false} width={55} />
+            <Tooltip contentStyle={darkTooltipStyle} />
+            <Area
+              type="monotone"
               dataKey="neto"
               name="Flujo neto"
-              radius={[3, 3, 0, 0]}
-              fill="#3b82f6"
-            >
-              {monthlyData.map((entry, index) => (
-                <Cell
-                  key={index}
-                  fill={entry.neto >= 0 ? '#22c55e' : '#ef4444'}
-                />
-              ))}
-            </Bar>
-          </BarChart>
+              stroke="#6439ff"
+              strokeWidth={2.5}
+              fill="url(#netoGradient)"
+              dot={{ fill: '#6439ff', strokeWidth: 0, r: 3 }}
+              activeDot={{ fill: '#8b6fff', strokeWidth: 0, r: 5 }}
+            />
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </div>

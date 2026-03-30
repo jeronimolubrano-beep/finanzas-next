@@ -10,8 +10,8 @@ export default async function OcrPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-800 mb-2">Cargar desde imagen</h1>
-      <p className="text-sm text-gray-500 mb-6">
+      <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--navy)' }}>Cargar desde imagen</h1>
+      <p className="text-sm mb-6" style={{ color: '#8b8ec0' }}>
         Subi una foto de un ticket, factura o recibo y Claude Vision extraera los datos automaticamente.
       </p>
       <OcrUploader

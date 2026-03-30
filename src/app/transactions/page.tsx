@@ -18,7 +18,6 @@ export default async function TransactionsPage({
   const params = await searchParams
   const supabase = await createClient()
 
-  // Cargar transacciones con relaciones
   let query = supabase
     .from('transactions')
     .select('*, categories(name), accounts(name), businesses(name)')
@@ -42,19 +41,15 @@ export default async function TransactionsPage({
   }
 
   const { data: transactions } = await query
-
-  // Cargar categorias y empresas para filtros
   const { data: categories } = await supabase.from('categories').select('*').order('type').order('name')
   const { data: businesses } = await supabase.from('businesses').select('*').order('name')
 
-  // Tipo de cambio actual
   const { data: settings } = await supabase.from('settings').select('*')
   const settingsMap: Record<string, string> = {}
   for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
   const tcRate = parseFloat(settingsMap.current_rate) || 0
   const hasTC = tcRate > 0
 
-  // Convertir monto a ARS considerando la moneda de la transaccion
   function toARS(t: { amount: number | string; currency?: string; exchange_rate?: number | null }): number {
     const amt = Number(t.amount)
     if ((t.currency || 'ARS') === 'USD') {
@@ -72,12 +67,9 @@ export default async function TransactionsPage({
     return amt
   }
 
-  // Totales en ARS (normalizados)
   const totalIncomeARS = (transactions ?? []).filter(t => t.type === 'income').reduce((s, t) => s + toARS(t), 0)
   const totalExpenseARS = (transactions ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + toARS(t), 0)
   const netARS = totalIncomeARS - totalExpenseARS
-
-  // Totales en USD
   const totalIncomeUSD = (transactions ?? []).filter(t => t.type === 'income').reduce((s, t) => s + toUSD(t), 0)
   const totalExpenseUSD = (transactions ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + toUSD(t), 0)
   const netUSD = totalIncomeUSD - totalExpenseUSD
@@ -86,10 +78,11 @@ export default async function TransactionsPage({
     <div>
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Transacciones</h1>
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--navy)' }}>Transacciones</h1>
         <Link
           href="/transactions/add"
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+          className="flex items-center gap-2 text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition"
+          style={{ background: '#6439ff' }}
         >
           <PlusCircle className="w-4 h-4" />
           Agregar
@@ -97,37 +90,37 @@ export default async function TransactionsPage({
       </div>
 
       {/* Filtros */}
-      <form className="bg-white rounded-lg shadow-sm p-4 mb-6">
+      <form className="rounded-xl border p-4 mb-6" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Tipo</label>
-            <select name="type" defaultValue={params.type ?? ''} className="w-full border rounded px-2 py-1.5 text-sm">
+            <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Tipo</label>
+            <select name="type" defaultValue={params.type ?? ''} className="w-full rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }}>
               <option value="">Todos</option>
               <option value="income">Ingreso</option>
               <option value="expense">Gasto</option>
             </select>
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Mes</label>
-            <input type="month" name="month" defaultValue={params.month ?? ''} className="w-full border rounded px-2 py-1.5 text-sm" />
+            <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Mes</label>
+            <input type="month" name="month" defaultValue={params.month ?? ''} className="w-full rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }} />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Empresa</label>
-            <select name="business_id" defaultValue={params.business_id ?? ''} className="w-full border rounded px-2 py-1.5 text-sm">
+            <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Empresa</label>
+            <select name="business_id" defaultValue={params.business_id ?? ''} className="w-full rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }}>
               <option value="">Todas</option>
               {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Estado</label>
-            <select name="status" defaultValue={params.status ?? ''} className="w-full border rounded px-2 py-1.5 text-sm">
+            <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Estado</label>
+            <select name="status" defaultValue={params.status ?? ''} className="w-full rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }}>
               <option value="">Todos</option>
               <option value="percibido">Cobrado / Pagado</option>
               <option value="devengado">Pendiente</option>
             </select>
           </div>
           <div className="flex items-end">
-            <button type="submit" className="w-full bg-gray-800 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-gray-900 transition">
+            <button type="submit" className="w-full text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:opacity-90 transition" style={{ background: '#6439ff' }}>
               Filtrar
             </button>
           </div>
@@ -135,50 +128,52 @@ export default async function TransactionsPage({
       </form>
 
       {/* Tabla */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-              <tr>
-                <th className="px-4 py-3 text-left">Fecha</th>
-                <th className="px-4 py-3 text-left">Descripcion</th>
-                <th className="px-4 py-3 text-left">Categoria</th>
-                <th className="px-4 py-3 text-left">Empresa</th>
-                <th className="px-4 py-3 text-right">Monto ARS</th>
-                {hasTC && <th className="px-4 py-3 text-right">Monto USD</th>}
-                <th className="px-4 py-3 text-center">Tipo</th>
-                <th className="px-4 py-3 text-center">Estado</th>
-                <th className="px-4 py-3 text-center">Vencimiento</th>
-                <th className="px-4 py-3 text-center">Acciones</th>
+            <thead>
+              <tr style={{ background: '#f4f4ff' }}>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Fecha</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Descripcion</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Categoria</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Empresa</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Monto ARS</th>
+                {hasTC && <th className="px-4 py-3 text-right text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Monto USD</th>}
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Tipo</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Estado</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Vencimiento</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y" style={{ borderColor: '#f0f0f8' }}>
               {(transactions ?? []).map((t) => (
-                <tr key={t.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-500">{formatDateAR(t.date)}</td>
-                  <td className="px-4 py-3 font-medium">{t.description}</td>
-                  <td className="px-4 py-3 text-gray-500">{t.categories?.name ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-500">{t.businesses?.name ?? '—'}</td>
-                  <td className={`px-4 py-3 text-right font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                <tr key={t.id} className="hover:bg-[#f9f9ff] transition">
+                  <td className="px-4 py-3" style={{ color: '#8b8ec0' }}>{formatDateAR(t.date)}</td>
+                  <td className="px-4 py-3 font-medium" style={{ color: 'var(--navy)' }}>{t.description}</td>
+                  <td className="px-4 py-3" style={{ color: '#8b8ec0' }}>{t.categories?.name ?? '—'}</td>
+                  <td className="px-4 py-3" style={{ color: '#8b8ec0' }}>{t.businesses?.name ?? '—'}</td>
+                  <td className={`px-4 py-3 text-right font-semibold ${t.type === 'income' ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
                     {t.type === 'income' ? '+' : '-'}${formatMoney(toARS(t))}
-                    {t.currency === 'USD' && <span className="text-xs text-gray-400 ml-1">(USD)</span>}
+                    {t.currency === 'USD' && <span className="text-xs ml-1" style={{ color: '#8b8ec0' }}>(USD)</span>}
                   </td>
                   {hasTC && (
-                    <td className="px-4 py-3 text-right text-xs text-gray-500">
+                    <td className="px-4 py-3 text-right text-xs" style={{ color: '#8b8ec0' }}>
                       {t.type === 'income' ? '+' : '-'}USD ${formatMoney(toUSD(t))}
                     </td>
                   )}
                   <td className="px-4 py-3 text-center">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      t.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                    }`}>
+                      t.type === 'income'
+                        ? 'text-[#2edbc1]'
+                        : 'text-[#fe4962]'
+                    }`} style={{ background: t.type === 'income' ? 'rgba(46,219,193,0.1)' : 'rgba(254,73,98,0.1)' }}>
                       {t.type === 'income' ? 'Ingreso' : 'Gasto'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      t.status === 'devengado' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
-                    }`}>
+                      t.status === 'devengado' ? 'text-yellow-600' : 'text-[#2edbc1]'
+                    }`} style={{ background: t.status === 'devengado' ? 'rgba(245,158,11,0.1)' : 'rgba(46,219,193,0.1)' }}>
                       {statusLabel(t.status, t.type)}
                     </span>
                   </td>
@@ -186,26 +181,30 @@ export default async function TransactionsPage({
                     {t.status === 'devengado' && t.due_date ? (() => {
                       const urgency = dueDateUrgency(t.due_date)
                       const days = daysUntilDue(t.due_date)
-                      const colorClass = urgency === 'overdue' ? 'bg-red-100 text-red-700'
-                        : urgency === 'soon' ? 'bg-yellow-100 text-yellow-700'
-                        : 'bg-green-100 text-green-700'
+                      const bg = urgency === 'overdue' ? 'rgba(254,73,98,0.1)'
+                        : urgency === 'soon' ? 'rgba(245,158,11,0.1)'
+                        : 'rgba(46,219,193,0.1)'
+                      const color = urgency === 'overdue' ? '#fe4962'
+                        : urgency === 'soon' ? '#f59e0b'
+                        : '#2edbc1'
                       const label = days < 0 ? `${Math.abs(days)}d atraso` : days === 0 ? 'Hoy' : `${days}d`
                       return (
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: bg, color }}>
                           {formatDateShort(t.due_date)} · {label}
                         </span>
                       )
                     })() : t.status === 'devengado' ? (
-                      <span className="text-xs text-gray-400">Sin fecha</span>
+                      <span className="text-xs" style={{ color: '#8b8ec0' }}>Sin fecha</span>
                     ) : (
-                      <span className="text-xs text-gray-300">—</span>
+                      <span className="text-xs" style={{ color: '#c8cce0' }}>—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <Link
                         href={`/transactions/${t.id}/edit`}
-                        className="p-1 text-gray-400 hover:text-blue-600 transition"
+                        className="p-1 transition hover:opacity-70"
+                        style={{ color: '#6439ff' }}
                         title="Editar"
                       >
                         <Pencil className="w-4 h-4" />
@@ -217,7 +216,7 @@ export default async function TransactionsPage({
               ))}
               {(!transactions || transactions.length === 0) && (
                 <tr>
-                  <td colSpan={hasTC ? 10 : 9} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={hasTC ? 10 : 9} className="px-4 py-12 text-center" style={{ color: '#8b8ec0' }}>
                     No hay transacciones registradas
                   </td>
                 </tr>
@@ -228,22 +227,22 @@ export default async function TransactionsPage({
 
         {/* Totales */}
         {transactions && transactions.length > 0 && (
-          <div className="border-t px-4 py-3 bg-gray-50 flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-2 text-sm">
-            <span className="text-gray-500 font-medium">
+          <div className="border-t px-4 py-3 flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-2 text-sm" style={{ background: '#f4f4ff', borderColor: '#e8e8f0' }}>
+            <span className="font-medium" style={{ color: '#8b8ec0' }}>
               {transactions.length} transaccion(es)
             </span>
             <div className="flex items-center gap-4">
-              <span className="text-green-600 font-semibold">+${formatMoney(totalIncomeARS)}</span>
-              <span className="text-red-600 font-semibold">-${formatMoney(totalExpenseARS)}</span>
-              <span className={`font-bold ${netARS >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <span className="font-semibold text-[#2edbc1]">+${formatMoney(totalIncomeARS)}</span>
+              <span className="font-semibold text-[#fe4962]">-${formatMoney(totalExpenseARS)}</span>
+              <span className={`font-bold ${netARS >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
                 Neto: ${formatMoney(netARS)}
               </span>
             </div>
             {hasTC && (
-              <div className="flex items-center gap-4 text-xs text-gray-500">
-                <span className="text-green-500">+USD ${formatMoney(totalIncomeUSD)}</span>
-                <span className="text-red-500">-USD ${formatMoney(totalExpenseUSD)}</span>
-                <span className={`font-semibold ${netUSD >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <div className="flex items-center gap-4 text-xs" style={{ color: '#8b8ec0' }}>
+                <span className="text-[#2edbc1]">+USD ${formatMoney(totalIncomeUSD)}</span>
+                <span className="text-[#fe4962]">-USD ${formatMoney(totalExpenseUSD)}</span>
+                <span className={`font-semibold ${netUSD >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
                   Neto: USD ${formatMoney(netUSD)}
                 </span>
               </div>
