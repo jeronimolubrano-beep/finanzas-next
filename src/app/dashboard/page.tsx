@@ -127,7 +127,7 @@ export default async function DashboardPage({
   }
 
   return (
-    <div className="-mx-4 -mt-6 min-h-screen px-4 py-6 sm:px-6" style={{ background: 'var(--dash-bg)' }}>
+    <div style={{ background: 'var(--dash-bg)', width: '100vw', marginLeft: 'calc(50% - 50vw)', marginTop: '-24px', minHeight: '100vh', padding: '24px 16px' }}>
       {/* Header + filtros */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
