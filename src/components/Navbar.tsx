@@ -6,10 +6,11 @@ import { useState, useEffect, useRef } from 'react'
 import {
   LayoutDashboard, ArrowLeftRight, PlusCircle, List,
   BarChart3, FileText, Settings, Tag, DollarSign, Menu, X, Camera,
-  Bell, Clock, AlertTriangle,
+  Bell, Clock, AlertTriangle, LogOut,
   type LucideIcon
 } from 'lucide-react'
 import { formatMoney, formatDateShort } from '@/lib/utils'
+import { logoutAction } from '@/app/login/logout'
 
 type NavLink = { href: string; label: string; icon: LucideIcon }
 type NavDropdown = { label: string; icon: LucideIcon; children: NavLink[] }
@@ -161,6 +162,17 @@ export function Navbar() {
               )
             )}
 
+            {/* Logout Button */}
+            <form action={logoutAction} className="ml-2">
+              <button
+                type="submit"
+                className="p-2 rounded-lg text-[#8b8ec0] hover:text-white transition-all"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </form>
+
             {/* Bell */}
             <div className="relative ml-2" ref={bellRef}>
               <button
@@ -272,6 +284,15 @@ export function Navbar() {
                 </span>
               )}
             </Link>
+            <form action={logoutAction} className="px-3 py-2.5">
+              <button
+                type="submit"
+                className="w-full text-left flex items-center gap-2 rounded-lg text-sm text-[#8b8ec0] hover:text-white hover:bg-white/5 px-0 py-1"
+              >
+                <LogOut className="w-4 h-4" />
+                Cerrar sesión
+              </button>
+            </form>
           </div>
         )}
       </div>
