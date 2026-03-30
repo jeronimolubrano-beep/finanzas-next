@@ -5,7 +5,6 @@ import {
   LayoutDashboard, PlusCircle, List, BarChart3, FileText,
   Camera, Tag, DollarSign, TrendingUp, TrendingDown, ArrowRight
 } from 'lucide-react'
-import { Logo } from '@/components/Logo'
 
 export default async function HomePage() {
   const supabase = await createClient()
@@ -35,7 +34,7 @@ export default async function HomePage() {
       {/* Hero */}
       <div className="text-center mb-10">
         <div className="flex justify-center mb-6">
-          <Logo size={120} />
+          <img src="/logo.png" alt="Grupo Lubrano" style={{ width: '240px', height: 'auto', objectFit: 'contain' }} />
         </div>
         <h1 className="text-4xl font-extrabold tracking-tight mb-2" style={{ color: 'var(--navy)' }}>
           Grupo Lubrano

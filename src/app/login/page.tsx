@@ -2,7 +2,6 @@
 
 import { loginAction } from './actions'
 import { useState } from 'react'
-import { Logo } from '@/components/Logo'
 
 export default function LoginPage() {
   return (
@@ -12,9 +11,6 @@ export default function LoginPage() {
            style={{ background: '#ffffff', borderColor: '#e8e8f0' }}>
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <Logo size={64} />
-          </div>
           <h1 className="text-xl font-bold" style={{ color: '#1a1a2e' }}>
             Grupo Lubrano
           </h1>
