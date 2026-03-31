@@ -1,13 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatMoney, statusLabel, formatDateAR, daysUntilDue } from '@/lib/utils'
-import { KPICard } from '@/components/KPICard'
-import { DollarSign, AlertTriangle, Clock } from 'lucide-react'
-import Link from 'next/link'
+import { formatMoney } from '@/lib/utils'
+import { TransactionDetail } from './TransactionDetail'
 
 export default async function CashFlowPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; business_id?: string }>
+  searchParams: Promise<{ month?: string }>
 }) {
   const params = await searchParams
   const supabase = await createClient()
@@ -22,287 +20,615 @@ export default async function CashFlowPage({
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
   const monthLabel = `${monthNames[parseInt(month) - 1]} ${year}`
 
-  let query = supabase
+  // Fetch transacciones + categorías + empresas
+  const { data: transactions } = await supabase
     .from('transactions')
-    .select('*, categories(name)')
+    .select('*, categories(name), businesses(name)')
     .gte('date', dateFrom)
     .lte('date', dateTo)
     .order('date')
 
-  if (params.business_id) {
-    query = query.eq('business_id', parseInt(params.business_id))
-  }
-
-  const { data: transactions } = await query
   const txs = transactions ?? []
-
-  const { data: businesses } = await supabase.from('businesses').select('*').order('name')
 
   // Tipo de cambio
   const { data: settings } = await supabase.from('settings').select('*')
   const settingsMap: Record<string, string> = {}
   for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
   const tcRate = parseFloat(settingsMap.current_rate) || 0
-  const tcDate = settingsMap.rate_date || ''
-  const tcType = settingsMap.rate_type || ''
   const hasTC = tcRate > 0
 
-  // Pagos pendientes urgentes (global, sin filtro de mes)
-  const { data: pendingTxs } = await supabase
-    .from('transactions')
-    .select('id, type, amount, due_date')
-    .eq('status', 'devengado')
-    .not('due_date', 'is', null)
+  // ── Separación ordinario / extraordinario ──
+  const ordIncome  = txs.filter(t => t.type === 'income'  && t.expense_type !== 'extraordinario')
+  const extIncome  = txs.filter(t => t.type === 'income'  && t.expense_type === 'extraordinario')
+  const ordExpense = txs.filter(t => t.type === 'expense' && t.expense_type !== 'extraordinario')
+  const extExpense = txs.filter(t => t.type === 'expense' && t.expense_type === 'extraordinario')
 
-  const allPending = pendingTxs ?? []
-  const today = new Date().toISOString().slice(0, 10)
-  const overdueCount = allPending.filter(t => t.due_date! < today).length
-  const soonCount = allPending.filter(t => t.due_date! >= today && daysUntilDue(t.due_date!) <= 7).length
-
-  // === PERCIBIDO ===
-  const percibido = txs.filter(t => t.status === 'percibido')
-  const pIncome = percibido.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-  const pExpense = percibido.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
-  const pNet = pIncome - pExpense
-
-  // === DEVENGADO ===
-  const dIncome = txs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-  const dExpense = txs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
-  const dNet = dIncome - dExpense
-
-  // Agrupar por categoria
-  type CatGroup = { name: string; total: number }
-  function groupByCategory(items: typeof txs, type: string): CatGroup[] {
-    const map: Record<string, CatGroup> = {}
-    for (const t of items.filter(t => t.type === type)) {
-      const name = (t.categories as unknown as { name: string } | null)?.name ?? 'Sin categoria'
-      if (!map[name]) map[name] = { name, total: 0 }
-      map[name].total += Number(t.amount)
-    }
-    return Object.values(map).sort((a, b) => b.total - a.total)
+  // ── Helpers ──
+  type AnyTx = typeof txs[number]
+  function sum(items: AnyTx[]) {
+    return items.reduce((s, t) => s + Number(t.amount), 0)
   }
 
-  const incomeByCategory = groupByCategory(txs, 'income')
-  const expenseByCategory = groupByCategory(txs, 'expense')
+  function groupByCategory(items: AnyTx[]): { name: string; total: number }[] {
+    const map: Record<string, number> = {}
+    for (const t of items) {
+      const name = (t.categories as { name: string } | null)?.name ?? 'Sin categoría'
+      map[name] = (map[name] ?? 0) + Number(t.amount)
+    }
+    return Object.entries(map)
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total)
+  }
 
-  function toUSD(ars: number): string {
-    return formatMoney(ars / tcRate)
+  function groupByBusiness(items: AnyTx[]): { name: string; total: number }[] {
+    const map: Record<string, number> = {}
+    for (const t of items) {
+      const name = (t.businesses as { name: string } | null)?.name ?? 'Sin empresa'
+      map[name] = (map[name] ?? 0) + Number(t.amount)
+    }
+    return Object.entries(map)
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total)
+  }
+
+  // KPIs principales
+  const totalOrdIncome  = sum(ordIncome)
+  const totalOrdExpense = sum(ordExpense)
+  const resultadoOperativo = totalOrdIncome - totalOrdExpense
+  const totalExtIncome  = sum(extIncome)
+  const totalExtExpense = sum(extExpense)
+  const netNoRecurrentes = totalExtIncome - totalExtExpense
+  const saldoFinal = resultadoOperativo + netNoRecurrentes
+
+  // Grupos para las tablas
+  const incomeByCategory  = groupByCategory(ordIncome)
+  const expenseByCategory = groupByCategory(ordExpense)
+
+  // Empresas presentes en el período
+  const allBusinessNames = Array.from(new Set(txs.map(t =>
+    (t.businesses as { name: string } | null)?.name ?? 'Sin empresa'
+  ))).sort()
+
+  // Por empresa: resultados clave
+  const bizResults = allBusinessNames.map(biz => {
+    const bizTxs = txs.filter(t => (t.businesses as { name: string } | null)?.name === biz)
+    const bOrdInc = bizTxs.filter(t => t.type === 'income'  && t.expense_type !== 'extraordinario')
+    const bExtInc = bizTxs.filter(t => t.type === 'income'  && t.expense_type === 'extraordinario')
+    const bOrdExp = bizTxs.filter(t => t.type === 'expense' && t.expense_type !== 'extraordinario')
+    const bExtExp = bizTxs.filter(t => t.type === 'expense' && t.expense_type === 'extraordinario')
+    const bOrdIncTotal = sum(bOrdInc)
+    const bOrdExpTotal = sum(bOrdExp)
+    const bResultOp = bOrdIncTotal - bOrdExpTotal
+    const bExtNet = sum(bExtInc) - sum(bExtExp)
+    return {
+      name: biz,
+      ordIncome: bOrdIncTotal,
+      ordExpense: bOrdExpTotal,
+      resultadoOp: bResultOp,
+      extNet: bExtNet,
+      saldo: bResultOp + bExtNet,
+    }
+  })
+
+  // Por empresa y categoría (gastos ordinarios)
+  const catNames = expenseByCategory.map(c => c.name)
+  const bizExpByCat = allBusinessNames.map(biz => {
+    const bizOrdExp = txs.filter(t =>
+      t.type === 'expense' &&
+      t.expense_type !== 'extraordinario' &&
+      (t.businesses as { name: string } | null)?.name === biz
+    )
+    const bycat = groupByCategory(bizOrdExp)
+    const map: Record<string, number> = {}
+    for (const c of bycat) map[c.name] = c.total
+    return { name: biz, byCat: map, total: sum(bizOrdExp) }
+  })
+
+  // ── Formateadores ──
+  /** Formato contable: gastos entre paréntesis */
+  function fmtARS(n: number, isExpense = false): string {
+    if (n === 0) return '—'
+    const f = `$${formatMoney(n)}`
+    return isExpense ? `(${f})` : f
+  }
+
+  /** Formato compacto en miles/millones para grilla */
+  function fmtK(n: number): string {
+    if (n === 0) return '—'
+    const abs = Math.abs(n)
+    let s: string
+    if (abs >= 1_000_000) s = `$${(abs / 1_000_000).toFixed(2)}M`
+    else if (abs >= 1_000) s = `$${(abs / 1_000).toFixed(0)}K`
+    else s = `$${abs.toFixed(0)}`
+    return n < 0 ? `(${s})` : s
+  }
+
+  function fmtUSD(ars: number): string {
+    if (!hasTC || ars === 0) return '—'
+    return `$${formatMoney(ars / tcRate)}`
+  }
+
+  // Colores semánticos
+  const colorPositive = '#059669'  // verde oscuro
+  const colorNegative = '#dc2626'  // rojo
+  const colorNavy = '#06083f'
+  const colorMuted = '#8b8ec0'
+
+  function resultColor(n: number) {
+    if (n > 0) return colorPositive
+    if (n < 0) return colorNegative
+    return colorMuted
   }
 
   return (
-    <div>
-      {/* Header + filtros */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div className="max-w-5xl mx-auto space-y-6">
+
+      {/* ── HEADER ── */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--navy)' }}>Cash Flow</h1>
-          <p className="text-sm" style={{ color: '#8b8ec0' }}>{monthLabel}</p>
+          <p className="text-xs font-medium uppercase tracking-widest mb-1" style={{ color: colorMuted }}>
+            Grupo Lubrano
+          </p>
+          <h1 className="text-2xl font-bold" style={{ color: colorNavy }}>
+            Estado de Flujo de Caja
+          </h1>
+          <p className="text-base font-medium mt-0.5" style={{ color: colorMuted }}>
+            {monthLabel}
+            {hasTC && (
+              <span className="ml-3 text-xs font-normal">
+                TC: ${tcRate.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+              </span>
+            )}
+          </p>
         </div>
-        <form className="flex flex-wrap items-center gap-2">
-          <input type="month" name="month" defaultValue={selectedMonth}
-                 className="rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }} />
-          <select name="business_id" defaultValue={params.business_id ?? ''}
-                  className="rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }}>
-            <option value="">Todas las empresas</option>
-            {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-          <button type="submit" className="text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:opacity-90 transition"
-                  style={{ background: '#6439ff' }}>
+        <form className="flex items-center gap-2">
+          <input
+            type="month"
+            name="month"
+            defaultValue={selectedMonth}
+            className="rounded-lg px-3 py-1.5 text-sm border"
+            style={{ borderColor: '#e0e0ef', background: '#fafafa' }}
+          />
+          <button
+            type="submit"
+            className="text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:opacity-90 transition"
+            style={{ background: '#6439ff' }}
+          >
             Filtrar
           </button>
         </form>
       </div>
 
-      {/* Alertas de pagos urgentes */}
-      {(overdueCount > 0 || soonCount > 0) && (
-        <div className="space-y-2 mb-6">
-          {overdueCount > 0 && (
-            <Link href="/transactions/pending"
-                  className="flex items-center gap-3 rounded-lg px-4 py-3 hover:opacity-90 transition border"
-                  style={{ background: 'rgba(254,73,98,0.05)', borderColor: 'rgba(254,73,98,0.2)' }}>
-              <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: '#fe4962' }} />
-              <span className="text-sm font-medium flex-1" style={{ color: '#fe4962' }}>
-                Tenés {overdueCount} pago{overdueCount > 1 ? 's' : ''} vencido{overdueCount > 1 ? 's' : ''}
-              </span>
-              <span className="text-xs" style={{ color: '#fe4962' }}>Ver →</span>
-            </Link>
-          )}
-          {soonCount > 0 && (
-            <Link href="/transactions/pending"
-                  className="flex items-center gap-3 rounded-lg px-4 py-3 hover:opacity-90 transition border"
-                  style={{ background: 'rgba(245,158,11,0.05)', borderColor: 'rgba(245,158,11,0.2)' }}>
-              <Clock className="w-4 h-4 shrink-0 text-yellow-500" />
-              <span className="text-sm font-medium flex-1 text-yellow-600">
-                Tenés {soonCount} pago{soonCount > 1 ? 's' : ''} que vence{soonCount > 1 ? 'n' : ''} esta semana
-              </span>
-              <span className="text-xs text-yellow-600">Ver →</span>
-            </Link>
-          )}
-        </div>
-      )}
-
-      {/* KPI Cards - Cobrado/Pagado vs Pendiente */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-        <KPICard title="Ingresos cobrados" value={`$${formatMoney(pIncome)}`} color="green" />
-        <KPICard title="Gastos pagados" value={`$${formatMoney(pExpense)}`} color="red" />
-        <KPICard title="Flujo neto efectivo" value={`${pNet >= 0 ? '+' : ''}$${formatMoney(pNet)}`}
-                 color={pNet >= 0 ? 'green' : 'red'} />
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <KPICard title="Ingresos totales (incl. pendientes)" value={`$${formatMoney(dIncome)}`} color="cyan" />
-        <KPICard title="Gastos totales (incl. pendientes)" value={`$${formatMoney(dExpense)}`} color="orange" />
-        <KPICard title="Flujo neto devengado" value={`${dNet >= 0 ? '+' : ''}$${formatMoney(dNet)}`}
-                 color={dNet >= 0 ? 'cyan' : 'red'} />
-      </div>
-
-      {/* Equivalente en USD */}
-      {hasTC && (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-5 mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <DollarSign className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-semibold text-blue-700">Equivalente en USD</span>
-            <span className="text-xs text-blue-400 ml-auto">
-              TC: ${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })} ({tcType}) al {tcDate}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <p className="text-xs text-blue-400">Ingresos</p>
-              <p className="text-lg font-bold text-green-600">USD ${toUSD(dIncome)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-blue-400">Gastos</p>
-              <p className="text-lg font-bold text-red-500">USD ${toUSD(dExpense)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-blue-400">Flujo neto</p>
-              <p className={`text-lg font-bold ${dNet >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                USD {dNet >= 0 ? '+' : ''}${toUSD(Math.abs(dNet))}
+      {/* ── SECCIÓN 1: KPI SUMMARY ── */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          {
+            label: 'Resultado Operativo',
+            value: resultadoOperativo,
+            sub: 'Ingresos – Gastos ordinarios',
+          },
+          {
+            label: 'Ítems No Recurrentes',
+            value: netNoRecurrentes,
+            sub: 'Extraordinarios neto',
+          },
+          {
+            label: 'Saldo del Mes',
+            value: saldoFinal,
+            sub: 'Resultado final del período',
+            large: true,
+          },
+        ].map(({ label, value, sub, large }) => (
+          <div
+            key={label}
+            className="rounded-xl border bg-white p-4"
+            style={{
+              borderColor: '#e8e8f0',
+              borderLeft: `3px solid ${resultColor(value)}`,
+            }}
+          >
+            <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: colorMuted }}>
+              {label}
+            </p>
+            <p className={`font-bold tabular-nums ${large ? 'text-2xl' : 'text-xl'}`}
+               style={{ color: resultColor(value) }}>
+              {value >= 0 ? '' : ''}
+              {value >= 0 ? `$${formatMoney(value)}` : `($${formatMoney(Math.abs(value))})`}
+            </p>
+            {hasTC && (
+              <p className="text-xs mt-0.5 tabular-nums" style={{ color: colorMuted }}>
+                USD {fmtUSD(Math.abs(value))}
               </p>
-            </div>
+            )}
+            <p className="text-xs mt-1" style={{ color: '#b0b4d0' }}>{sub}</p>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
 
-      {/* Desglose por categoria */}
-      <div className="grid md:grid-cols-2 gap-6 mb-6">
-        <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
-          <div className="px-4 py-3 border-b flex items-center gap-2" style={{ background: 'rgba(46,219,193,0.05)', borderColor: '#e8e8f0' }}>
-            <h2 className="font-semibold text-[#2edbc1]">Ingresos por categoria</h2>
-          </div>
+      {/* ── SECCIÓN 2: ESTADO DE FLUJO DE CAJA (P&L) ── */}
+      <div className="rounded-xl border bg-white overflow-hidden" style={{ borderColor: '#e8e8f0' }}>
+
+        {/* INGRESOS OPERATIVOS */}
+        <div className="px-6 pt-5 pb-2">
+          <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: colorMuted }}>
+            Ingresos Operativos
+          </p>
           <table className="w-full text-sm">
-            <thead style={{ background: '#f4f4ff' }}>
-              {hasTC && (
-                <tr>
-                  <th className="px-4 py-1 text-left text-xs" style={{ color: '#8b8ec0' }}></th>
-                  <th className="px-4 py-1 text-right text-xs" style={{ color: '#8b8ec0' }}>ARS</th>
-                  <th className="px-4 py-1 text-right text-xs" style={{ color: '#8b8ec0' }}>USD</th>
-                </tr>
-              )}
+            <thead>
+              <tr>
+                <th className="pb-1.5 text-left text-xs font-medium" style={{ color: colorMuted }}></th>
+                <th className="pb-1.5 text-right text-xs font-medium w-40" style={{ color: colorMuted }}>ARS</th>
+                {hasTC && <th className="pb-1.5 text-right text-xs font-medium w-32" style={{ color: colorMuted }}>USD</th>}
+                <th className="pb-1.5 text-right text-xs font-medium w-16" style={{ color: colorMuted }}>%</th>
+              </tr>
             </thead>
-            <tbody className="divide-y" style={{ borderColor: '#f0f0f8' }}>
+            <tbody>
               {incomeByCategory.map(c => (
-                <tr key={c.name} className="hover:bg-[#f9f9ff]">
-                  <td className="px-4 py-2" style={{ color: 'var(--navy)' }}>{c.name}</td>
-                  <td className="px-4 py-2 text-right font-semibold text-[#2edbc1]">${formatMoney(c.total)}</td>
-                  {hasTC && <td className="px-4 py-2 text-right text-xs" style={{ color: '#8b8ec0' }}>${toUSD(c.total)}</td>}
+                <tr key={c.name} className="border-t" style={{ borderColor: '#f4f4fc' }}>
+                  <td className="py-1.5 pl-2 text-sm" style={{ color: colorNavy }}>{c.name}</td>
+                  <td className="py-1.5 text-right tabular-nums text-sm font-medium" style={{ color: colorNavy }}>
+                    ${formatMoney(c.total)}
+                  </td>
+                  {hasTC && (
+                    <td className="py-1.5 text-right tabular-nums text-xs" style={{ color: colorMuted }}>
+                      {fmtUSD(c.total)}
+                    </td>
+                  )}
+                  <td className="py-1.5 text-right text-xs" style={{ color: colorMuted }}>
+                    {totalOrdIncome > 0 ? `${((c.total / totalOrdIncome) * 100).toFixed(1)}%` : '—'}
+                  </td>
                 </tr>
               ))}
               {incomeByCategory.length === 0 && (
-                <tr><td colSpan={hasTC ? 3 : 2} className="px-4 py-4 text-center" style={{ color: '#8b8ec0' }}>Sin ingresos</td></tr>
+                <tr><td colSpan={hasTC ? 4 : 3} className="py-2 pl-2 text-sm" style={{ color: colorMuted }}>Sin ingresos operativos</td></tr>
               )}
             </tbody>
-            <tfoot className="border-t" style={{ background: '#f4f4ff', borderColor: '#e8e8f0' }}>
-              <tr>
-                <td className="px-4 py-2 font-bold" style={{ color: 'var(--navy)' }}>Total</td>
-                <td className="px-4 py-2 text-right font-bold text-[#2edbc1]">${formatMoney(dIncome)}</td>
-                {hasTC && <td className="px-4 py-2 text-right font-bold text-xs" style={{ color: '#8b8ec0' }}>${toUSD(dIncome)}</td>}
+            <tfoot>
+              <tr className="border-t" style={{ borderColor: '#d0d4f0' }}>
+                <td className="pt-2.5 pb-3 pl-2 text-sm font-bold" style={{ color: colorNavy }}>
+                  Total Ingresos Operativos
+                </td>
+                <td className="pt-2.5 pb-3 text-right tabular-nums text-sm font-bold" style={{ color: '#059669' }}>
+                  ${formatMoney(totalOrdIncome)}
+                </td>
+                {hasTC && (
+                  <td className="pt-2.5 pb-3 text-right tabular-nums text-xs font-medium" style={{ color: colorMuted }}>
+                    {fmtUSD(totalOrdIncome)}
+                  </td>
+                )}
+                <td className="pt-2.5 pb-3 text-right text-xs font-bold" style={{ color: colorMuted }}>100%</td>
               </tr>
             </tfoot>
           </table>
         </div>
 
-        <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
-          <div className="px-4 py-3 border-b flex items-center gap-2" style={{ background: 'rgba(254,73,98,0.05)', borderColor: '#e8e8f0' }}>
-            <h2 className="font-semibold text-[#fe4962]">Gastos por categoria</h2>
-          </div>
+        <div className="h-px mx-6" style={{ background: '#e8e8f0' }} />
+
+        {/* GASTOS OPERATIVOS */}
+        <div className="px-6 py-4">
+          <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: colorMuted }}>
+            Gastos Operativos
+          </p>
           <table className="w-full text-sm">
-            <thead style={{ background: '#f4f4ff' }}>
-              {hasTC && (
-                <tr>
-                  <th className="px-4 py-1 text-left text-xs" style={{ color: '#8b8ec0' }}></th>
-                  <th className="px-4 py-1 text-right text-xs" style={{ color: '#8b8ec0' }}>ARS</th>
-                  <th className="px-4 py-1 text-right text-xs" style={{ color: '#8b8ec0' }}>USD</th>
-                </tr>
-              )}
-            </thead>
-            <tbody className="divide-y" style={{ borderColor: '#f0f0f8' }}>
+            <tbody>
               {expenseByCategory.map(c => (
-                <tr key={c.name} className="hover:bg-[#f9f9ff]">
-                  <td className="px-4 py-2" style={{ color: 'var(--navy)' }}>{c.name}</td>
-                  <td className="px-4 py-2 text-right font-semibold text-[#fe4962]">${formatMoney(c.total)}</td>
-                  {hasTC && <td className="px-4 py-2 text-right text-xs" style={{ color: '#8b8ec0' }}>${toUSD(c.total)}</td>}
+                <tr key={c.name} className="border-t" style={{ borderColor: '#f4f4fc' }}>
+                  <td className="py-1.5 pl-2 text-sm" style={{ color: colorNavy }}>{c.name}</td>
+                  <td className="py-1.5 text-right tabular-nums text-sm font-medium w-40" style={{ color: colorNegative }}>
+                    (${formatMoney(c.total)})
+                  </td>
+                  {hasTC && (
+                    <td className="py-1.5 text-right tabular-nums text-xs w-32" style={{ color: colorMuted }}>
+                      ({fmtUSD(c.total)})
+                    </td>
+                  )}
+                  <td className="py-1.5 text-right text-xs w-16" style={{ color: colorMuted }}>
+                    {totalOrdExpense > 0 ? `${((c.total / totalOrdExpense) * 100).toFixed(1)}%` : '—'}
+                  </td>
                 </tr>
               ))}
               {expenseByCategory.length === 0 && (
-                <tr><td colSpan={hasTC ? 3 : 2} className="px-4 py-4 text-center" style={{ color: '#8b8ec0' }}>Sin gastos</td></tr>
+                <tr><td colSpan={hasTC ? 4 : 3} className="py-2 pl-2 text-sm" style={{ color: colorMuted }}>Sin gastos operativos</td></tr>
               )}
             </tbody>
-            <tfoot className="border-t" style={{ background: '#f4f4ff', borderColor: '#e8e8f0' }}>
-              <tr>
-                <td className="px-4 py-2 font-bold" style={{ color: 'var(--navy)' }}>Total</td>
-                <td className="px-4 py-2 text-right font-bold text-[#fe4962]">${formatMoney(dExpense)}</td>
-                {hasTC && <td className="px-4 py-2 text-right font-bold text-xs" style={{ color: '#8b8ec0' }}>${toUSD(dExpense)}</td>}
+            <tfoot>
+              <tr className="border-t" style={{ borderColor: '#d0d4f0' }}>
+                <td className="pt-2.5 pb-1 pl-2 text-sm font-bold" style={{ color: colorNavy }}>
+                  Total Gastos Operativos
+                </td>
+                <td className="pt-2.5 pb-1 text-right tabular-nums text-sm font-bold" style={{ color: colorNegative }}>
+                  (${formatMoney(totalOrdExpense)})
+                </td>
+                {hasTC && (
+                  <td className="pt-2.5 pb-1 text-right tabular-nums text-xs font-medium" style={{ color: colorMuted }}>
+                    ({fmtUSD(totalOrdExpense)})
+                  </td>
+                )}
+                <td className="pt-2.5 pb-1 text-right text-xs font-bold" style={{ color: colorMuted }}>100%</td>
               </tr>
             </tfoot>
           </table>
         </div>
-      </div>
 
-      {/* Detalle de transacciones */}
-      <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
-        <div className="px-4 py-3 border-b" style={{ background: '#f4f4ff', borderColor: '#e8e8f0' }}>
-          <h2 className="font-semibold" style={{ color: 'var(--navy)' }}>Detalle de transacciones</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead style={{ background: '#f4f4ff' }}>
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Fecha</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Descripcion</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Categoria</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Monto</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Estado</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y" style={{ borderColor: '#f0f0f8' }}>
-              {txs.map(t => (
-                <tr key={t.id} className="hover:bg-[#f9f9ff]">
-                  <td className="px-4 py-2" style={{ color: '#8b8ec0' }}>{formatDateAR(t.date)}</td>
-                  <td className="px-4 py-2" style={{ color: 'var(--navy)' }}>{t.description}</td>
-                  <td className="px-4 py-2" style={{ color: '#8b8ec0' }}>{(t.categories as unknown as { name: string } | null)?.name ?? '—'}</td>
-                  <td className={`px-4 py-2 text-right font-semibold ${t.type === 'income' ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
-                    {t.type === 'income' ? '+' : '-'}${formatMoney(Number(t.amount))}
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      t.status === 'devengado' ? 'bg-yellow-600/15 text-yellow-600' : 'bg-[#2edbc1]/15 text-[#2edbc1]'
-                    }`}>
-                      {statusLabel(t.status, t.type)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {txs.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center" style={{ color: '#8b8ec0' }}>
-                    No hay transacciones en este periodo
-                  </td>
-                </tr>
+        {/* RESULTADO OPERATIVO */}
+        <div className="mx-6 mb-4 rounded-lg px-4 py-3" style={{ background: '#f4f4fc', border: '1px solid #e0e0ef' }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: colorMuted }}>Resultado Operativo (NOI)</p>
+              <p className="text-xs mt-0.5" style={{ color: '#b0b4d0' }}>Ingresos operativos – Gastos operativos</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xl font-bold tabular-nums" style={{ color: resultColor(resultadoOperativo) }}>
+                {resultadoOperativo >= 0
+                  ? `$${formatMoney(resultadoOperativo)}`
+                  : `($${formatMoney(Math.abs(resultadoOperativo))})`
+                }
+              </p>
+              {hasTC && (
+                <p className="text-xs" style={{ color: colorMuted }}>
+                  USD {fmtUSD(Math.abs(resultadoOperativo))}
+                </p>
               )}
+            </div>
+          </div>
+        </div>
+
+        <div className="h-px mx-6" style={{ background: '#e8e8f0' }} />
+
+        {/* ÍTEMS NO RECURRENTES */}
+        <div className="px-6 py-4">
+          <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: colorMuted }}>
+            Ítems No Recurrentes
+          </p>
+          <table className="w-full text-sm">
+            <tbody>
+              {/* Ingresos extraordinarios */}
+              <tr className="border-t" style={{ borderColor: '#f4f4fc' }}>
+                <td className="py-1.5 pl-2" style={{ color: colorNavy }}>Ingresos extraordinarios</td>
+                <td className="py-1.5 text-right tabular-nums font-medium w-40" style={{ color: totalExtIncome > 0 ? '#059669' : colorMuted }}>
+                  {totalExtIncome > 0 ? `$${formatMoney(totalExtIncome)}` : '—'}
+                </td>
+                {hasTC && (
+                  <td className="py-1.5 text-right tabular-nums text-xs w-32" style={{ color: colorMuted }}>
+                    {totalExtIncome > 0 ? fmtUSD(totalExtIncome) : '—'}
+                  </td>
+                )}
+                <td className="w-16" />
+              </tr>
+              {/* Gastos extraordinarios */}
+              <tr className="border-t" style={{ borderColor: '#f4f4fc' }}>
+                <td className="py-1.5 pl-2" style={{ color: colorNavy }}>Gastos extraordinarios</td>
+                <td className="py-1.5 text-right tabular-nums font-medium w-40" style={{ color: totalExtExpense > 0 ? colorNegative : colorMuted }}>
+                  {totalExtExpense > 0 ? `($${formatMoney(totalExtExpense)})` : '—'}
+                </td>
+                {hasTC && (
+                  <td className="py-1.5 text-right tabular-nums text-xs w-32" style={{ color: colorMuted }}>
+                    {totalExtExpense > 0 ? `(${fmtUSD(totalExtExpense)})` : '—'}
+                  </td>
+                )}
+                <td className="w-16" />
+              </tr>
             </tbody>
+            <tfoot>
+              <tr className="border-t" style={{ borderColor: '#d0d4f0' }}>
+                <td className="pt-2.5 pb-1 pl-2 font-bold" style={{ color: colorNavy }}>
+                  Total No Recurrentes
+                </td>
+                <td className="pt-2.5 pb-1 text-right tabular-nums font-bold w-40" style={{ color: resultColor(netNoRecurrentes) }}>
+                  {netNoRecurrentes === 0 ? '—' : netNoRecurrentes > 0
+                    ? `$${formatMoney(netNoRecurrentes)}`
+                    : `($${formatMoney(Math.abs(netNoRecurrentes))})`
+                  }
+                </td>
+                {hasTC && (
+                  <td className="pt-2.5 pb-1 text-right tabular-nums text-xs w-32" style={{ color: colorMuted }}>
+                    {netNoRecurrentes !== 0 ? `${netNoRecurrentes < 0 ? '(' : ''}${fmtUSD(Math.abs(netNoRecurrentes))}${netNoRecurrentes < 0 ? ')' : ''}` : '—'}
+                  </td>
+                )}
+                <td className="w-16" />
+              </tr>
+            </tfoot>
           </table>
         </div>
+
+        {/* SALDO FINAL */}
+        <div
+          className="px-6 py-4 border-t"
+          style={{
+            borderColor: '#e0e0ef',
+            background: saldoFinal >= 0 ? 'rgba(5,150,105,0.04)' : 'rgba(220,38,38,0.04)',
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: colorMuted }}>
+                Saldo Neto del Período
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: '#b0b4d0' }}>
+                {monthLabel}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold tabular-nums" style={{ color: resultColor(saldoFinal) }}>
+                {saldoFinal >= 0
+                  ? `$${formatMoney(saldoFinal)}`
+                  : `($${formatMoney(Math.abs(saldoFinal))})`
+                }
+              </p>
+              {hasTC && (
+                <p className="text-xs mt-0.5" style={{ color: colorMuted }}>
+                  USD {fmtUSD(Math.abs(saldoFinal))}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* ── SECCIÓN 3: DESGLOSE POR EMPRESA ── */}
+      {bizResults.length > 0 && (
+        <div className="rounded-xl border bg-white overflow-hidden" style={{ borderColor: '#e8e8f0' }}>
+          <div className="px-5 py-3.5 border-b" style={{ borderColor: '#e8e8f0', background: '#fafafa' }}>
+            <p className="text-sm font-semibold" style={{ color: colorNavy }}>Desglose por empresa</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ background: '#f4f4ff' }}>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold" style={{ color: colorMuted }}></th>
+                  {bizResults.map(b => (
+                    <th key={b.name} className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: colorNavy }}>
+                      {b.name}
+                    </th>
+                  ))}
+                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wide" style={{ color: colorNavy, borderLeft: '1px solid #e0e0ef' }}>
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* Ingresos operativos */}
+                <tr className="border-t" style={{ borderColor: '#f0f0f8' }}>
+                  <td className="px-4 py-2 text-xs" style={{ color: colorNavy }}>Ingr. Operativos</td>
+                  {bizResults.map(b => (
+                    <td key={b.name} className="px-4 py-2 text-right tabular-nums text-xs font-medium" style={{ color: b.ordIncome > 0 ? colorNavy : colorMuted }}>
+                      {b.ordIncome > 0 ? `$${formatMoney(b.ordIncome)}` : '—'}
+                    </td>
+                  ))}
+                  <td className="px-4 py-2 text-right tabular-nums text-xs font-bold" style={{ color: '#059669', borderLeft: '1px solid #f0f0f8' }}>
+                    ${formatMoney(totalOrdIncome)}
+                  </td>
+                </tr>
+                {/* Gastos operativos */}
+                <tr className="border-t" style={{ borderColor: '#f0f0f8' }}>
+                  <td className="px-4 py-2 text-xs" style={{ color: colorNavy }}>Gast. Operativos</td>
+                  {bizResults.map(b => (
+                    <td key={b.name} className="px-4 py-2 text-right tabular-nums text-xs font-medium" style={{ color: b.ordExpense > 0 ? colorNegative : colorMuted }}>
+                      {b.ordExpense > 0 ? `(${fmtK(b.ordExpense)})` : '—'}
+                    </td>
+                  ))}
+                  <td className="px-4 py-2 text-right tabular-nums text-xs font-bold" style={{ color: colorNegative, borderLeft: '1px solid #f0f0f8' }}>
+                    ({fmtK(totalOrdExpense)})
+                  </td>
+                </tr>
+                {/* Resultado operativo */}
+                <tr className="border-t" style={{ borderColor: '#d0d4f0', background: '#f8f8fd' }}>
+                  <td className="px-4 py-2 text-xs font-bold" style={{ color: colorNavy }}>Resultado Op.</td>
+                  {bizResults.map(b => (
+                    <td key={b.name} className="px-4 py-2 text-right tabular-nums text-xs font-bold" style={{ color: resultColor(b.resultadoOp) }}>
+                      {b.resultadoOp >= 0 ? fmtK(b.resultadoOp) : `(${fmtK(Math.abs(b.resultadoOp))})`}
+                    </td>
+                  ))}
+                  <td className="px-4 py-2 text-right tabular-nums text-xs font-bold" style={{ color: resultColor(resultadoOperativo), borderLeft: '1px solid #e0e0ef' }}>
+                    {resultadoOperativo >= 0 ? fmtK(resultadoOperativo) : `(${fmtK(Math.abs(resultadoOperativo))})`}
+                  </td>
+                </tr>
+                {/* Ítems no recurrentes */}
+                <tr className="border-t" style={{ borderColor: '#f0f0f8' }}>
+                  <td className="px-4 py-2 text-xs" style={{ color: colorNavy }}>No Recurrentes</td>
+                  {bizResults.map(b => (
+                    <td key={b.name} className="px-4 py-2 text-right tabular-nums text-xs font-medium" style={{ color: b.extNet !== 0 ? resultColor(b.extNet) : colorMuted }}>
+                      {b.extNet === 0 ? '—' : b.extNet > 0 ? fmtK(b.extNet) : `(${fmtK(Math.abs(b.extNet))})`}
+                    </td>
+                  ))}
+                  <td className="px-4 py-2 text-right tabular-nums text-xs font-medium" style={{ color: netNoRecurrentes !== 0 ? resultColor(netNoRecurrentes) : colorMuted, borderLeft: '1px solid #f0f0f8' }}>
+                    {netNoRecurrentes === 0 ? '—' : netNoRecurrentes > 0 ? fmtK(netNoRecurrentes) : `(${fmtK(Math.abs(netNoRecurrentes))})`}
+                  </td>
+                </tr>
+                {/* Saldo neto */}
+                <tr className="border-t" style={{ borderColor: '#d0d4f0', background: '#f4f4ff' }}>
+                  <td className="px-4 py-2.5 text-xs font-bold" style={{ color: colorNavy }}>Saldo del Mes</td>
+                  {bizResults.map(b => (
+                    <td key={b.name} className="px-4 py-2.5 text-right tabular-nums text-xs font-bold" style={{ color: resultColor(b.saldo) }}>
+                      {b.saldo >= 0 ? fmtK(b.saldo) : `(${fmtK(Math.abs(b.saldo))})`}
+                    </td>
+                  ))}
+                  <td className="px-4 py-2.5 text-right tabular-nums text-xs font-bold" style={{ color: resultColor(saldoFinal), borderLeft: '1px solid #e0e0ef' }}>
+                    {saldoFinal >= 0 ? fmtK(saldoFinal) : `(${fmtK(Math.abs(saldoFinal))})`}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── SECCIÓN 4: GASTOS OPERATIVOS POR EMPRESA Y CATEGORÍA ── */}
+      {bizResults.length > 0 && catNames.length > 0 && (
+        <div className="rounded-xl border bg-white overflow-hidden" style={{ borderColor: '#e8e8f0' }}>
+          <div className="px-5 py-3.5 border-b" style={{ borderColor: '#e8e8f0', background: '#fafafa' }}>
+            <p className="text-sm font-semibold" style={{ color: colorNavy }}>Gastos operativos por empresa y categoría</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ background: '#f4f4ff' }}>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold" style={{ color: colorMuted }}>Categoría</th>
+                  {bizExpByCat.map(b => (
+                    <th key={b.name} className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: colorNavy }}>
+                      {b.name}
+                    </th>
+                  ))}
+                  <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wide" style={{ color: colorNavy, borderLeft: '1px solid #e0e0ef' }}>Total</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-semibold" style={{ color: colorMuted }}>%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {catNames.map(cat => {
+                  const catTotal = expenseByCategory.find(c => c.name === cat)?.total ?? 0
+                  return (
+                    <tr key={cat} className="border-t" style={{ borderColor: '#f0f0f8' }}>
+                      <td className="px-4 py-2 text-xs" style={{ color: colorNavy }}>{cat}</td>
+                      {bizExpByCat.map(b => {
+                        const val = b.byCat[cat] ?? 0
+                        return (
+                          <td key={b.name} className="px-4 py-2 text-right tabular-nums text-xs" style={{ color: val > 0 ? colorNegative : colorMuted }}>
+                            {val > 0 ? `(${fmtK(val)})` : '—'}
+                          </td>
+                        )
+                      })}
+                      <td className="px-4 py-2 text-right tabular-nums text-xs font-semibold" style={{ color: colorNegative, borderLeft: '1px solid #f0f0f8' }}>
+                        ({fmtK(catTotal)})
+                      </td>
+                      <td className="px-4 py-2 text-right text-xs" style={{ color: colorMuted }}>
+                        {totalOrdExpense > 0 ? `${((catTotal / totalOrdExpense) * 100).toFixed(1)}%` : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t" style={{ borderColor: '#d0d4f0', background: '#f8f8fd' }}>
+                  <td className="px-4 py-2.5 text-xs font-bold" style={{ color: colorNavy }}>Total</td>
+                  {bizExpByCat.map(b => (
+                    <td key={b.name} className="px-4 py-2.5 text-right tabular-nums text-xs font-bold" style={{ color: b.total > 0 ? colorNegative : colorMuted }}>
+                      {b.total > 0 ? `(${fmtK(b.total)})` : '—'}
+                    </td>
+                  ))}
+                  <td className="px-4 py-2.5 text-right tabular-nums text-xs font-bold" style={{ color: colorNegative, borderLeft: '1px solid #e0e0ef' }}>
+                    ({fmtK(totalOrdExpense)})
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-xs font-bold" style={{ color: colorMuted }}>100%</td>
+                </tr>
+                <tr className="border-t" style={{ borderColor: '#f0f0f8' }}>
+                  <td className="px-4 py-1.5 text-xs" style={{ color: colorMuted }}>%</td>
+                  {bizExpByCat.map(b => (
+                    <td key={b.name} className="px-4 py-1.5 text-right text-xs" style={{ color: colorMuted }}>
+                      {totalOrdExpense > 0 ? `${((b.total / totalOrdExpense) * 100).toFixed(1)}%` : '—'}
+                    </td>
+                  ))}
+                  <td style={{ borderLeft: '1px solid #f0f0f8' }} />
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── SECCIÓN 5: DETALLE DE TRANSACCIONES (COLAPSABLE) ── */}
+      <TransactionDetail transactions={txs as Parameters<typeof TransactionDetail>[0]['transactions']} />
+
     </div>
   )
 }
