@@ -37,7 +37,7 @@ const navItems: NavItem[] = [
     label: 'Reportes',
     icon: BarChart3,
     children: [
-      { href: '/reports/cash-flow', label: 'Cash Flow', icon: DollarSign },
+      { href: '/reports/cash-flow', label: 'Flujo de Caja', icon: DollarSign },
       { href: '/reports/income-statement', label: 'Estado de Resultados', icon: FileText },
     ],
   },
