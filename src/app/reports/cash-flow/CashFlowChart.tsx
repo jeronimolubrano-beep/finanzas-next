@@ -58,10 +58,10 @@ export function CashFlowChart({ data }: Props) {
             fontSize: '12px',
             color: '#06083f',
           }}
-          formatter={(value: number) => [
-            `$${formatMoney(Math.abs(value))}${value < 0 ? ' (negativo)' : ''}`,
-            'Saldo acumulado',
-          ]}
+          formatter={(value) => {
+            const n = Number(value)
+            return [`$${formatMoney(Math.abs(n))}${n < 0 ? ' (negativo)' : ''}`, 'Saldo acumulado'] as [string, string]
+          }}
           labelFormatter={(day) => `Día ${day}`}
         />
         <ReferenceLine y={0} stroke="#e0e0ef" strokeDasharray="4 2" />
