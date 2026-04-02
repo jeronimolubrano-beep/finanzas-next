@@ -45,6 +45,11 @@ function LoginForm() {
     if (result?.error) {
       setError(result.error)
       setLoading(false)
+    } else {
+      // Hard redirect ensures cookies are committed to the browser before the next request.
+      // Using window.location.href (full HTTP request) instead of Next.js soft navigation
+      // prevents the race condition where the proxy doesn't see the session cookies.
+      window.location.href = '/'
     }
   }
 
