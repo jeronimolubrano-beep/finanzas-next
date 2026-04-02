@@ -13,15 +13,20 @@ export default async function TransactionsPage({
     business_id?: string
     status?: string
     category_id?: string
+    sort?: string
   }>
 }) {
   const params = await searchParams
   const supabase = await createClient()
 
+  const sortParam = params.sort ?? 'date_desc'
+  const sortField = sortParam.startsWith('amount') ? 'amount' : 'date'
+  const ascending = sortParam.endsWith('_asc')
+
   let query = supabase
     .from('transactions')
     .select('*, categories(name), accounts(name), businesses(name)')
-    .order('date', { ascending: false })
+    .order(sortField, { ascending })
     .limit(200)
 
   if (params.type && ['income', 'expense'].includes(params.type)) {
@@ -91,7 +96,7 @@ export default async function TransactionsPage({
 
       {/* Filtros */}
       <form className="rounded-xl border p-4 mb-6" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
           <div>
             <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Tipo</label>
             <select name="type" defaultValue={params.type ?? ''} className="w-full rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }}>
@@ -117,6 +122,15 @@ export default async function TransactionsPage({
               <option value="">Todos</option>
               <option value="percibido">Cobrado / Pagado</option>
               <option value="devengado">Pendiente</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Ordenar por</label>
+            <select name="sort" defaultValue={sortParam} className="w-full rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }}>
+              <option value="date_desc">Más nuevo primero</option>
+              <option value="date_asc">Más antiguo primero</option>
+              <option value="amount_desc">Mayor monto primero</option>
+              <option value="amount_asc">Menor monto primero</option>
             </select>
           </div>
           <div className="flex items-end">

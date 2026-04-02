@@ -5,7 +5,7 @@ import { DollarSign } from 'lucide-react'
 export default async function IncomeStatementPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string; business_id?: string }>
+  searchParams: Promise<{ year?: string; business_id?: string; sort?: string }>
 }) {
   const params = await searchParams
   const supabase = await createClient()
@@ -59,6 +59,16 @@ export default async function IncomeStatementPage({
   const totalSavingsRate = totalIncome > 0 ? (totalNet / totalIncome * 100) : 0
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i)
 
+  const sortParam = params.sort ?? 'date_asc'
+  const monthsWithData = months.map((m, i) => ({
+    num: m,
+    name: monthNames[i],
+    data: monthlyData[i],
+  }))
+  if (sortParam === 'date_desc') monthsWithData.reverse()
+  else if (sortParam === 'amount_desc') monthsWithData.sort((a, b) => b.data.net - a.data.net)
+  else if (sortParam === 'amount_asc') monthsWithData.sort((a, b) => a.data.net - b.data.net)
+
   return (
     <div>
       {/* Header + filtros */}
@@ -79,6 +89,14 @@ export default async function IncomeStatementPage({
             <option value="">Todas las empresas</option>
             {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+          <select name="sort" defaultValue={sortParam}
+                  className="rounded-lg px-3 py-1.5 text-sm border"
+                  style={{ borderColor: '#e8e8f0' }}>
+            <option value="date_asc">Ene → Dic</option>
+            <option value="date_desc">Dic → Ene</option>
+            <option value="amount_desc">Mayor resultado primero</option>
+            <option value="amount_asc">Menor resultado primero</option>
+          </select>
           <button type="submit" className="text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:opacity-90 transition"
                   style={{ background: '#6439ff' }}>
             Filtrar
@@ -93,8 +111,8 @@ export default async function IncomeStatementPage({
             <thead>
               <tr style={{ background: '#f4f4ff' }}>
                 <th className="px-4 py-3 text-left sticky left-0 z-10 text-xs font-semibold uppercase" style={{ background: '#f4f4ff', color: '#8b8ec0' }}>Concepto</th>
-                {monthNames.map(m => (
-                  <th key={m} className="px-3 py-3 text-right min-w-[90px] text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>{m}</th>
+                {monthsWithData.map(m => (
+                  <th key={m.num} className="px-3 py-3 text-right min-w-[90px] text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>{m.name}</th>
                 ))}
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase" style={{ background: '#f0f0f8', color: '#8b8ec0' }}>TOTAL</th>
               </tr>
@@ -102,9 +120,9 @@ export default async function IncomeStatementPage({
             <tbody>
               <tr style={{ background: 'rgba(46,219,193,0.03)' }}>
                 <td className="px-4 py-3 font-semibold text-[#2edbc1] sticky left-0 z-10" style={{ background: 'rgba(46,219,193,0.03)' }}>Total Ingresos</td>
-                {monthlyData.map((m, i) => (
-                  <td key={i} className="px-3 py-3 text-right font-medium text-[#2edbc1]">
-                    {m.income > 0 ? `$${formatMoney0(m.income)}` : '—'}
+                {monthsWithData.map(m => (
+                  <td key={m.num} className="px-3 py-3 text-right font-medium text-[#2edbc1]">
+                    {m.data.income > 0 ? `$${formatMoney0(m.data.income)}` : '—'}
                   </td>
                 ))}
                 <td className="px-4 py-3 text-right font-bold text-[#2edbc1]" style={{ background: 'rgba(46,219,193,0.05)' }}>
@@ -114,9 +132,9 @@ export default async function IncomeStatementPage({
 
               <tr style={{ background: 'rgba(254,73,98,0.03)' }}>
                 <td className="px-4 py-3 font-semibold text-[#fe4962] sticky left-0 z-10" style={{ background: 'rgba(254,73,98,0.03)' }}>Total Gastos</td>
-                {monthlyData.map((m, i) => (
-                  <td key={i} className="px-3 py-3 text-right font-medium text-[#fe4962]">
-                    {m.expense > 0 ? `$${formatMoney0(m.expense)}` : '—'}
+                {monthsWithData.map(m => (
+                  <td key={m.num} className="px-3 py-3 text-right font-medium text-[#fe4962]">
+                    {m.data.expense > 0 ? `$${formatMoney0(m.data.expense)}` : '—'}
                   </td>
                 ))}
                 <td className="px-4 py-3 text-right font-bold text-[#fe4962]" style={{ background: 'rgba(254,73,98,0.05)' }}>
@@ -126,9 +144,9 @@ export default async function IncomeStatementPage({
 
               <tr style={{ borderBottom: '2px solid #e8e8f0' }}>
                 <td className="px-4 py-3 font-bold sticky left-0 z-10" style={{ color: 'var(--navy)' }}>Resultado Neto</td>
-                {monthlyData.map((m, i) => (
-                  <td key={i} className={`px-3 py-3 text-right font-bold ${m.net >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
-                    {(m.income > 0 || m.expense > 0) ? `${m.net >= 0 ? '+' : ''}$${formatMoney0(m.net)}` : '—'}
+                {monthsWithData.map(m => (
+                  <td key={m.num} className={`px-3 py-3 text-right font-bold ${m.data.net >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
+                    {(m.data.income > 0 || m.data.expense > 0) ? `${m.data.net >= 0 ? '+' : ''}$${formatMoney0(m.data.net)}` : '—'}
                   </td>
                 ))}
                 <td className={`px-4 py-3 text-right font-bold ${totalNet >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`} style={{ background: '#f4f4ff' }}>
@@ -138,11 +156,11 @@ export default async function IncomeStatementPage({
 
               <tr>
                 <td className="px-4 py-3 font-medium sticky left-0 z-10" style={{ color: '#8b8ec0' }}>Tasa de Ahorro</td>
-                {monthlyData.map((m, i) => {
-                  const color = m.savingsRate >= 20 ? '#2edbc1' : m.savingsRate >= 0 ? '#f59e0b' : '#fe4962'
+                {monthsWithData.map(m => {
+                  const color = m.data.savingsRate >= 20 ? '#2edbc1' : m.data.savingsRate >= 0 ? '#f59e0b' : '#fe4962'
                   return (
-                    <td key={i} className="px-3 py-3 text-right text-sm" style={{ color }}>
-                      {m.income > 0 ? `${m.savingsRate.toFixed(0)}%` : '—'}
+                    <td key={m.num} className="px-3 py-3 text-right text-sm" style={{ color }}>
+                      {m.data.income > 0 ? `${m.data.savingsRate.toFixed(0)}%` : '—'}
                     </td>
                   )
                 })}
