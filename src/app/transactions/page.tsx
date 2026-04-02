@@ -14,12 +14,14 @@ export default async function TransactionsPage({
     status?: string
     category_id?: string
     sort?: string
+    currency?: string
   }>
 }) {
   const params = await searchParams
   const supabase = await createClient()
 
   const sortParam = params.sort ?? 'date_desc'
+  const showCurrency = params.currency === 'usd' ? 'usd' : 'ars'
   const sortField = sortParam.startsWith('amount') ? 'amount' : 'date'
   const ascending = sortParam.endsWith('_asc')
 
@@ -79,6 +81,17 @@ export default async function TransactionsPage({
   const totalExpenseUSD = (transactions ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + toUSD(t), 0)
   const netUSD = totalIncomeUSD - totalExpenseUSD
 
+  function buildParams(overrides: Record<string, string>) {
+    const p = new URLSearchParams()
+    if (params.type) p.set('type', params.type)
+    if (params.month) p.set('month', params.month)
+    if (params.business_id) p.set('business_id', params.business_id)
+    if (params.status) p.set('status', params.status)
+    p.set('sort', sortParam)
+    for (const [k, v] of Object.entries(overrides)) p.set(k, v)
+    return `/transactions?${p.toString()}`
+  }
+
   return (
     <div>
       {/* Header */}
@@ -96,6 +109,7 @@ export default async function TransactionsPage({
 
       {/* Filtros */}
       <form className="rounded-xl border p-4 mb-6" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
+        <input type="hidden" name="currency" value={showCurrency} />
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
           <div>
             <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Tipo</label>
@@ -151,8 +165,17 @@ export default async function TransactionsPage({
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Descripcion</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Categoria</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Empresa</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Monto ARS</th>
-                {hasTC && <th className="px-4 py-3 text-right text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Monto USD</th>}
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>
+                  <div className="flex items-center justify-end gap-2">
+                    <span>Monto</span>
+                    {hasTC && (
+                      <div className="flex text-xs border rounded-md overflow-hidden font-normal normal-case" style={{ borderColor: '#d0d0e8' }}>
+                        <a href={buildParams({ currency: 'ars' })} className={`px-2 py-0.5 transition-colors ${showCurrency === 'ars' ? 'bg-[#6439ff] text-white' : 'text-[#8b8ec0] hover:bg-gray-100'}`}>ARS</a>
+                        <a href={buildParams({ currency: 'usd' })} className={`px-2 py-0.5 transition-colors border-l ${showCurrency === 'usd' ? 'bg-[#6439ff] text-white' : 'text-[#8b8ec0] hover:bg-gray-100'}`} style={{ borderColor: '#d0d0e8' }}>USD</a>
+                      </div>
+                    )}
+                  </div>
+                </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Tipo</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Estado</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Vencimiento</th>
@@ -167,14 +190,15 @@ export default async function TransactionsPage({
                   <td className="px-4 py-3" style={{ color: '#8b8ec0' }}>{t.categories?.name ?? '—'}</td>
                   <td className="px-4 py-3" style={{ color: '#8b8ec0' }}>{t.businesses?.name ?? '—'}</td>
                   <td className={`px-4 py-3 text-right font-semibold ${t.type === 'income' ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
-                    {t.type === 'income' ? '+' : '-'}${formatMoney(toARS(t))}
-                    {t.currency === 'USD' && <span className="text-xs ml-1" style={{ color: '#8b8ec0' }}>(USD)</span>}
+                    {showCurrency === 'usd' && hasTC ? (
+                      <>{t.type === 'income' ? '+' : '-'}USD ${formatMoney(toUSD(t))}</>
+                    ) : (
+                      <>
+                        {t.type === 'income' ? '+' : '-'}${formatMoney(toARS(t))}
+                        {t.currency === 'USD' && <span className="text-xs ml-1" style={{ color: '#8b8ec0' }}>(USD)</span>}
+                      </>
+                    )}
                   </td>
-                  {hasTC && (
-                    <td className="px-4 py-3 text-right text-xs" style={{ color: '#8b8ec0' }}>
-                      {t.type === 'income' ? '+' : '-'}USD ${formatMoney(toUSD(t))}
-                    </td>
-                  )}
                   <td className="px-4 py-3 text-center">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       t.type === 'income'
@@ -230,7 +254,7 @@ export default async function TransactionsPage({
               ))}
               {(!transactions || transactions.length === 0) && (
                 <tr>
-                  <td colSpan={hasTC ? 10 : 9} className="px-4 py-12 text-center" style={{ color: '#8b8ec0' }}>
+                  <td colSpan={9} className="px-4 py-12 text-center" style={{ color: '#8b8ec0' }}>
                     No hay transacciones registradas
                   </td>
                 </tr>
@@ -245,19 +269,20 @@ export default async function TransactionsPage({
             <span className="font-medium" style={{ color: '#8b8ec0' }}>
               {transactions.length} transaccion(es)
             </span>
-            <div className="flex items-center gap-4">
-              <span className="font-semibold text-[#2edbc1]">+${formatMoney(totalIncomeARS)}</span>
-              <span className="font-semibold text-[#fe4962]">-${formatMoney(totalExpenseARS)}</span>
-              <span className={`font-bold ${netARS >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
-                Neto: ${formatMoney(netARS)}
-              </span>
-            </div>
-            {hasTC && (
-              <div className="flex items-center gap-4 text-xs" style={{ color: '#8b8ec0' }}>
-                <span className="text-[#2edbc1]">+USD ${formatMoney(totalIncomeUSD)}</span>
-                <span className="text-[#fe4962]">-USD ${formatMoney(totalExpenseUSD)}</span>
-                <span className={`font-semibold ${netUSD >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
+            {showCurrency === 'usd' && hasTC ? (
+              <div className="flex items-center gap-4">
+                <span className="font-semibold text-[#2edbc1]">+USD ${formatMoney(totalIncomeUSD)}</span>
+                <span className="font-semibold text-[#fe4962]">-USD ${formatMoney(totalExpenseUSD)}</span>
+                <span className={`font-bold ${netUSD >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
                   Neto: USD ${formatMoney(netUSD)}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4">
+                <span className="font-semibold text-[#2edbc1]">+${formatMoney(totalIncomeARS)}</span>
+                <span className="font-semibold text-[#fe4962]">-${formatMoney(totalExpenseARS)}</span>
+                <span className={`font-bold ${netARS >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
+                  Neto: ${formatMoney(netARS)}
                 </span>
               </div>
             )}

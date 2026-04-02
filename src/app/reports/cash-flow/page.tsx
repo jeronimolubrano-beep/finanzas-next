@@ -558,9 +558,9 @@ export default async function CashFlowPage({
             <p className="text-3xl font-bold tabular-nums" style={{ color: signColor(saldoFinal) }}>
               {fmtBalance(saldoFinal)}
             </p>
-            {hasTC && saldoFinal !== 0 && (
-              <p className="text-sm font-medium mt-0.5" style={{ color: C_MUTED }}>
-                USD {fmtUSD(saldoFinal)}
+            {hasTC && (
+              <p className="text-sm mt-1 tabular-nums" style={{ color: C_MUTED }}>
+                ≈ USD {saldoFinal !== 0 ? fmtUSD(saldoFinal) : '$0'}
               </p>
             )}
           </div>
