@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const publicRoutes = ['/login', '/signup', '/forgot-password', '/reset-password']
   const apiAuthRoutes = /^\/api\/(auth|ocr|pending-count)/
 
