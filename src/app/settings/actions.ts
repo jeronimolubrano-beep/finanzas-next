@@ -2,6 +2,34 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { getUserEmailByUsername, updateUsername } from '@/lib/db'
+
+export async function changeUsernameAction(formData: FormData) {
+  const newUsername = (formData.get('username') as string)?.trim()
+
+  if (!newUsername) return { error: 'El usuario es requerido' }
+  if (newUsername.length < 3) return { error: 'El usuario debe tener al menos 3 caracteres' }
+  if (newUsername.length > 20) return { error: 'El usuario no puede exceder 20 caracteres' }
+  if (!/^[a-zA-Z0-9_-]+$/.test(newUsername)) {
+    return { error: 'Solo letras, números, guiones y guiones bajos' }
+  }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'No autenticado' }
+
+  // Check if username already taken
+  const existingEmail = await getUserEmailByUsername(newUsername)
+  if (existingEmail && existingEmail !== user.email) {
+    return { error: 'Ese usuario ya está en uso' }
+  }
+
+  const { error } = await updateUsername(user.id, newUsername)
+  if (error) return { error: 'Error al actualizar el usuario' }
+
+  revalidatePath('/settings')
+  return { success: true }
+}
 
 export async function saveExchangeRate(formData: FormData) {
   const supabase = await createClient()
