@@ -13,7 +13,7 @@ export async function loginAction(formData: FormData) {
   }
 
   // Determine if credential is username or email
-  let email = credential
+  let email: string | null = credential
   if (!credential.includes('@')) {
     // It's a username, look up the email
     email = await getUserEmailByUsername(credential)
@@ -25,7 +25,7 @@ export async function loginAction(formData: FormData) {
   const supabase = await createClient()
 
   const { error } = await supabase.auth.signInWithPassword({
-    email,
+    email: email as string,
     password,
   })
 
