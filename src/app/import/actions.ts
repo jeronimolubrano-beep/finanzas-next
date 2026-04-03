@@ -2,6 +2,14 @@
 
 import { createClient } from '@/lib/supabase/server'
 
+export async function getSettingsExchangeRate(): Promise<number> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('settings').select('key, value')
+  const map: Record<string, string> = {}
+  for (const s of data ?? []) map[s.key] = s.value ?? ''
+  return parseFloat(map.current_rate) || 0
+}
+
 interface ImportTransaction {
   date: string
   description: string

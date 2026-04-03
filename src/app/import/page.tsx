@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { parseExcelCashflow, type ParsedTransaction } from '@/lib/excel-parser'
-import { saveImportedTransactions, getCategories } from './actions'
+import { saveImportedTransactions, getCategories, getSettingsExchangeRate } from './actions'
 import { parsePdfFile } from './pdf-action'
 import { formatMoney } from '@/lib/utils'
 import { Upload, FileSpreadsheet, FileText, CheckCircle, AlertTriangle, Loader2, Trash2, ArrowLeft } from 'lucide-react'
@@ -23,16 +23,17 @@ export default function ImportPage() {
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [period, setPeriod] = useState('')
-  const [exchangeRate, setExchangeRate] = useState('')
+  const [exchangeRate, setExchangeRate] = useState(0)
   const [fileName, setFileName] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [importResult, setImportResult] = useState<{ inserted: number } | null>(null)
   const [dragActive, setDragActive] = useState(false)
 
-  // Cargar categorías al montar
+  // Cargar categorías y TC al montar
   useEffect(() => {
     getCategories().then(setCategories)
+    getSettingsExchangeRate().then(setExchangeRate)
   }, [])
 
   // Generar período default (mes anterior)
@@ -63,9 +64,8 @@ export default function ImportPage() {
         // PDF: enviar al server para parseo con pdf-parse
         const formData = new FormData()
         formData.append('file', file)
-        const rate = parseFloat(exchangeRate) || 0
 
-        const result = await parsePdfFile(formData, period, rate)
+        const result = await parsePdfFile(formData, period, exchangeRate)
 
         if (result.error) {
           toast.error(result.error)
@@ -89,8 +89,7 @@ export default function ImportPage() {
           try {
             const data = new Uint8Array(e.target?.result as ArrayBuffer)
             const workbook = XLSX.read(data, { type: 'array' })
-            const rate = parseFloat(exchangeRate) || 0
-            const parsed = parseExcelCashflow(workbook, period, rate)
+            const parsed = parseExcelCashflow(workbook, period, exchangeRate)
 
             if (parsed.length === 0) {
               toast.error('No se encontraron transacciones en el archivo')
@@ -230,7 +229,7 @@ export default function ImportPage() {
       {step === 'upload' && (
         <div className="space-y-6">
           {/* Config */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex flex-wrap items-end gap-4">
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#4a4a6a' }}>
                 Período (año-mes)
@@ -239,24 +238,15 @@ export default function ImportPage() {
                 type="month"
                 value={period}
                 onChange={e => setPeriod(e.target.value)}
-                className="w-full rounded-lg px-3 py-2.5 text-sm border"
+                className="rounded-lg px-3 py-2.5 text-sm border"
                 style={{ borderColor: '#e0e0ef', background: '#fafaff' }}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: '#4a4a6a' }}>
-                Tipo de cambio USD (opcional)
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="Ej: 1200 — se auto-detecta del PDF"
-                value={exchangeRate}
-                onChange={e => setExchangeRate(e.target.value)}
-                className="w-full rounded-lg px-3 py-2.5 text-sm border"
-                style={{ borderColor: '#e0e0ef', background: '#fafaff' }}
-              />
-            </div>
+            {exchangeRate > 0 && (
+              <p className="text-xs pb-2.5" style={{ color: '#8b8ec0' }}>
+                TC activo: <strong style={{ color: '#6439ff' }}>${exchangeRate.toLocaleString('es-AR')}</strong> ARS/USD
+              </p>
+            )}
           </div>
 
           {/* Drop zone */}
