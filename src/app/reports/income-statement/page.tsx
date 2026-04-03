@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { formatMoney0 } from '@/lib/utils'
 import { DollarSign } from 'lucide-react'
+import { TaxSection, type CategoryBreakdown } from './TaxSection'
 
 export default async function IncomeStatementPage({
   searchParams,
@@ -15,7 +16,7 @@ export default async function IncomeStatementPage({
 
   let query = supabase
     .from('transactions')
-    .select('date, type, amount')
+    .select('date, type, amount, categories(name, type)')
     .gte('date', `${selectedYear}-01-01`)
     .lte('date', `${selectedYear}-12-31`)
 
@@ -24,7 +25,25 @@ export default async function IncomeStatementPage({
   }
 
   const { data: transactions } = await query
-  const txs = transactions ?? []
+
+  type TxRow = {
+    date: string
+    type: string
+    amount: number | string
+    categories: { name: string; type: string } | null
+  }
+  const txs = (transactions ?? []) as unknown as TxRow[]
+
+  // Build category breakdown for tax modal
+  const catMap: Record<string, CategoryBreakdown> = {}
+  for (const t of txs) {
+    const name = t.categories?.name ?? 'Sin categoría'
+    const catType = (t.categories?.type ?? 'expense') as 'income' | 'expense'
+    if (!catMap[name]) catMap[name] = { name, catType, income: 0, expense: 0 }
+    if (t.type === 'income') catMap[name].income += Number(t.amount)
+    else catMap[name].expense += Number(t.amount)
+  }
+  const categoryBreakdown = Object.values(catMap)
   const { data: businesses } = await supabase.from('businesses').select('*').order('name')
 
   const { data: settings } = await supabase.from('settings').select('*')
@@ -45,9 +64,9 @@ export default async function IncomeStatementPage({
   type MonthData = { income: number; expense: number; net: number; savingsRate: number }
   const monthlyData: MonthData[] = months.map(m => {
     const monthStr = String(m).padStart(2, '0')
-    const monthTxs = txs.filter(t => t.date.startsWith(`${selectedYear}-${monthStr}`))
-    const income = monthTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-    const expense = monthTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+    const monthTxs = txs.filter((t: TxRow) => t.date.startsWith(`${selectedYear}-${monthStr}`))
+    const income = monthTxs.filter((t: TxRow) => t.type === 'income').reduce((s: number, t: TxRow) => s + Number(t.amount), 0)
+    const expense = monthTxs.filter((t: TxRow) => t.type === 'expense').reduce((s: number, t: TxRow) => s + Number(t.amount), 0)
     const net = income - expense
     const savingsRate = income > 0 ? (net / income * 100) : 0
     return { income, expense, net, savingsRate }
@@ -172,6 +191,13 @@ export default async function IncomeStatementPage({
           </table>
         </div>
       </div>
+
+      {/* Sección de impuestos */}
+      <TaxSection
+        totalNet={totalNet}
+        categoryBreakdown={categoryBreakdown}
+        selectedYear={selectedYear}
+      />
 
       {/* Resumen anual */}
       <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
