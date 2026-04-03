@@ -30,7 +30,8 @@ export async function POST(request: NextRequest) {
     const { data: businesses } = await supabase.from('businesses').select('name')
 
     // ── Build summaries ─────────────────────────────────────────────────────
-    const txs = transactions ?? []
+    type Tx = typeof transactions extends (infer T)[] ? T : never
+    const txs = (transactions ?? []) as Array<Tx & { categories: { name: string } | null; businesses: { name: string } | null }>
     const totalIncome  = txs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
     const totalExpense = txs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
     const pendingCount = txs.filter(t => t.status === 'devengado').length
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
     // By category
     const byCat: Record<string, { income: number; expense: number }> = {}
     for (const t of txs) {
-      const name = (t.categories as { name: string } | null)?.name ?? 'Sin categoría'
+      const name = t.categories?.name ?? 'Sin categoría'
       if (!byCat[name]) byCat[name] = { income: 0, expense: 0 }
       if (t.type === 'income') byCat[name].income += Number(t.amount)
       else byCat[name].expense += Number(t.amount)
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     // By business
     const byBiz: Record<string, { income: number; expense: number }> = {}
     for (const t of txs) {
-      const name = (t.businesses as { name: string } | null)?.name ?? 'Sin empresa'
+      const name = t.businesses?.name ?? 'Sin empresa'
       if (!byBiz[name]) byBiz[name] = { income: 0, expense: 0 }
       if (t.type === 'income') byBiz[name].income += Number(t.amount)
       else byBiz[name].expense += Number(t.amount)
@@ -95,7 +96,7 @@ Empresas: ${(businesses ?? []).map(b => b.name).join(', ')}
 
 Últimas 15 transacciones:
 ${txs.slice(0, 15).map(t =>
-  `  ${t.date} | ${t.description} | ${fmt(Number(t.amount))} ${t.currency ?? 'ARS'} | ${t.type} | ${t.status} | ${(t.categories as { name: string } | null)?.name ?? '-'} | ${(t.businesses as { name: string } | null)?.name ?? '-'}`
+  `  ${t.date} | ${t.description} | ${fmt(Number(t.amount))} ${t.currency ?? 'ARS'} | ${t.type} | ${t.status} | ${t.categories?.name ?? '-'} | ${t.businesses?.name ?? '-'}`
 ).join('\n')}
 `
 
