@@ -30,8 +30,17 @@ export async function POST(request: NextRequest) {
     const { data: businesses } = await supabase.from('businesses').select('name')
 
     // ── Build summaries ─────────────────────────────────────────────────────
-    type Tx = typeof transactions extends (infer T)[] ? T : never
-    const txs = (transactions ?? []) as Array<Tx & { categories: { name: string } | null; businesses: { name: string } | null }>
+    type Tx = {
+      date: string
+      description: string
+      amount: number | string
+      type: string
+      status: string
+      currency: string | null
+      categories: { name: string } | null
+      businesses: { name: string } | null
+    }
+    const txs = (transactions ?? []) as Tx[]
     const totalIncome  = txs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
     const totalExpense = txs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
     const pendingCount = txs.filter(t => t.status === 'devengado').length
