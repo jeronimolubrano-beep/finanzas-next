@@ -352,7 +352,7 @@ export async function parsePdfReport(
   userExchangeRate: number,
 ): Promise<ParsedTransaction[]> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pdfParse = require('pdf-parse')
+  const pdfParse = require('pdf-parse/lib/pdf-parse.js')
   const data = await pdfParse(buffer)
   const text: string = data.text
 
