@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx'
 import { parseExcelCashflow, type ParsedTransaction } from '@/lib/excel-parser'
 import { saveImportedTransactions, getCategories, getSettingsExchangeRate } from './actions'
 import { formatMoney } from '@/lib/utils'
-import { Upload, FileSpreadsheet, FileText, CheckCircle, AlertTriangle, Loader2, Trash2, ArrowLeft } from 'lucide-react'
+import { Upload, FileSpreadsheet, FileText, CheckCircle, AlertTriangle, Loader2, Trash2, ArrowLeft, Pencil, X } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 
@@ -29,6 +29,7 @@ export default function ImportPage() {
   const [importResult, setImportResult] = useState<{ inserted: number } | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const [pdfMode, setPdfMode] = useState<'summary' | 'detail'>('detail')
+  const [editingTx, setEditingTx] = useState<ParsedTransaction | null>(null)
 
   // Cargar categorías y TC al montar
   useEffect(() => {
@@ -151,6 +152,11 @@ export default function ImportPage() {
 
   const removeTransaction = (id: string) => {
     setTransactions(prev => prev.filter(t => t.id !== id))
+  }
+
+  const updateTransaction = (updated: ParsedTransaction) => {
+    setTransactions(prev => prev.map(t => t.id === updated.id ? updated : t))
+    setEditingTx(null)
   }
 
   // Resolver category name → id
@@ -446,7 +452,7 @@ export default function ImportPage() {
                   <th className="px-3 py-2.5 text-left text-xs font-semibold" style={{ color: '#4a4a6a' }}>Categoría</th>
                   <th className="px-3 py-2.5 text-right text-xs font-semibold" style={{ color: '#4a4a6a' }}>Monto</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold" style={{ color: '#4a4a6a' }}>$</th>
-                  <th className="px-3 py-2.5 w-10"></th>
+                  <th className="px-3 py-2.5 w-16"></th>
                 </tr>
               </thead>
               <tbody>
@@ -538,13 +544,22 @@ export default function ImportPage() {
                         </span>
                       </td>
                       <td className="px-3 py-2">
-                        <button
-                          onClick={() => removeTransaction(tx.id)}
-                          className="p-1 rounded hover:bg-red-50 transition"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setEditingTx({ ...tx })}
+                            className="p-1 rounded hover:bg-blue-50 transition"
+                            title="Editar"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-gray-400 hover:text-blue-500" />
+                          </button>
+                          <button
+                            onClick={() => removeTransaction(tx.id)}
+                            className="p-1 rounded hover:bg-red-50 transition"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -553,6 +568,16 @@ export default function ImportPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* Modal edición */}
+      {editingTx && (
+        <EditModal
+          tx={editingTx}
+          categories={categories}
+          onSave={updateTransaction}
+          onClose={() => setEditingTx(null)}
+        />
       )}
 
       {/* STEP 3: Done */}
@@ -585,6 +610,229 @@ export default function ImportPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Modal de edición ────────────────────────────────────────────────────────
+
+const BUSINESSES = [
+  { id: 1, name: 'SADIA'  },
+  { id: 1, name: 'GUEMES' },
+  { id: 1, name: 'PDA'    },
+  { id: 2, name: 'ÑANCUL' },
+  { id: 4, name: 'EML'    },
+]
+
+function EditModal({
+  tx,
+  categories,
+  onSave,
+  onClose,
+}: {
+  tx: ParsedTransaction
+  categories: { id: number; name: string; type: 'income' | 'expense' }[]
+  onSave: (t: ParsedTransaction) => void
+  onClose: () => void
+}) {
+  const [draft, setDraft] = useState<ParsedTransaction>({ ...tx })
+
+  const set = <K extends keyof ParsedTransaction>(key: K, value: ParsedTransaction[K]) =>
+    setDraft(prev => ({ ...prev, [key]: value }))
+
+  const applicableCategories = categories.filter(c => c.type === draft.type)
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(10,10,30,0.45)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        className="w-full max-w-lg rounded-2xl shadow-2xl"
+        style={{ background: '#fff', border: '1px solid #e0e0ef' }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: '#f0f0f8' }}>
+          <h2 className="text-sm font-bold" style={{ color: '#1a1a2e' }}>Editar transacción</h2>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 transition">
+            <X className="w-4 h-4 text-gray-400" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 space-y-3">
+          {/* Fecha */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: '#4a4a6a' }}>Fecha</label>
+              <input
+                type="date"
+                value={draft.date}
+                onChange={e => set('date', e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm border"
+                style={{ borderColor: '#e0e0ef', color: '#1a1a2e' }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: '#4a4a6a' }}>Tipo</label>
+              <select
+                value={draft.type}
+                onChange={e => {
+                  set('type', e.target.value as 'income' | 'expense')
+                  set('categoryName', null)
+                }}
+                className="w-full rounded-lg px-3 py-2 text-sm border"
+                style={{ borderColor: '#e0e0ef', color: '#1a1a2e' }}
+              >
+                <option value="income">Ingreso</option>
+                <option value="expense">Gasto</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Descripción */}
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: '#4a4a6a' }}>Descripción</label>
+            <input
+              type="text"
+              value={draft.description}
+              onChange={e => set('description', e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm border"
+              style={{ borderColor: '#e0e0ef', color: '#1a1a2e' }}
+            />
+          </div>
+
+          {/* Notas */}
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: '#4a4a6a' }}>Notas</label>
+            <input
+              type="text"
+              value={draft.notes ?? ''}
+              onChange={e => set('notes', e.target.value || null)}
+              className="w-full rounded-lg px-3 py-2 text-sm border"
+              style={{ borderColor: '#e0e0ef', color: '#1a1a2e' }}
+              placeholder="Opcional"
+            />
+          </div>
+
+          {/* Monto + Moneda */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: '#4a4a6a' }}>Monto</label>
+              <input
+                type="number"
+                value={draft.amount}
+                onChange={e => set('amount', parseFloat(e.target.value) || 0)}
+                min={0}
+                step={1}
+                className="w-full rounded-lg px-3 py-2 text-sm border"
+                style={{ borderColor: '#e0e0ef', color: '#1a1a2e' }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: '#4a4a6a' }}>Moneda</label>
+              <select
+                value={draft.currency}
+                onChange={e => set('currency', e.target.value as 'ARS' | 'USD')}
+                className="w-full rounded-lg px-3 py-2 text-sm border"
+                style={{ borderColor: '#e0e0ef', color: '#1a1a2e' }}
+              >
+                <option value="ARS">ARS</option>
+                <option value="USD">USD</option>
+              </select>
+            </div>
+          </div>
+
+          {/* TC (solo si USD) */}
+          {draft.currency === 'USD' && (
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: '#4a4a6a' }}>Tipo de cambio</label>
+              <input
+                type="number"
+                value={draft.exchangeRate ?? ''}
+                onChange={e => set('exchangeRate', parseFloat(e.target.value) || null)}
+                min={0}
+                step={1}
+                className="w-full rounded-lg px-3 py-2 text-sm border"
+                style={{ borderColor: '#e0e0ef', color: '#1a1a2e' }}
+                placeholder="ARS por USD"
+              />
+            </div>
+          )}
+
+          {/* Empresa + Tipo gasto */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: '#4a4a6a' }}>Empresa</label>
+              <select
+                value={draft.businessName ?? ''}
+                onChange={e => {
+                  const biz = BUSINESSES.find(b => b.name === e.target.value)
+                  setDraft(prev => ({ ...prev, businessName: biz?.name ?? null, businessId: biz?.id ?? null }))
+                }}
+                className="w-full rounded-lg px-3 py-2 text-sm border"
+                style={{ borderColor: '#e0e0ef', color: '#1a1a2e' }}
+              >
+                <option value="">— Sin empresa —</option>
+                {BUSINESSES.map(b => (
+                  <option key={b.name} value={b.name}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: '#4a4a6a' }}>Tipo de gasto</label>
+              <select
+                value={draft.expenseType ?? 'ordinario'}
+                onChange={e => set('expenseType', e.target.value as 'ordinario' | 'extraordinario')}
+                className="w-full rounded-lg px-3 py-2 text-sm border"
+                style={{ borderColor: '#e0e0ef', color: '#1a1a2e' }}
+              >
+                <option value="ordinario">Ordinario</option>
+                <option value="extraordinario">Extraordinario</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Categoría */}
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: '#4a4a6a' }}>Categoría</label>
+            <select
+              value={draft.categoryName ?? ''}
+              onChange={e => set('categoryName', e.target.value || null)}
+              className="w-full rounded-lg px-3 py-2 text-sm border"
+              style={{
+                borderColor: draft.categoryName ? '#e0e0ef' : '#f59e0b',
+                background: draft.categoryName ? '#fff' : '#fffbeb',
+                color: '#1a1a2e',
+              }}
+            >
+              <option value="">Sin categoría</option>
+              {applicableCategories.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-3 px-5 py-4 border-t" style={{ borderColor: '#f0f0f8' }}>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm border hover:bg-gray-50 transition"
+            style={{ borderColor: '#e0e0ef', color: '#4a4a6a' }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => onSave(draft)}
+            className="px-5 py-2 rounded-lg text-sm font-semibold text-white transition hover:opacity-90"
+            style={{ background: '#6439ff' }}
+          >
+            Guardar cambios
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
