@@ -323,18 +323,22 @@ export async function parsePdfReport(
   // Re-numerar IDs
   results.forEach((t, i) => { t.id = `pdf-${i + 1}` })
 
-  // Logging de resumen
-  const incomeTxs = results.filter(t => t.type === 'income').length
-  const expenseTxs = results.filter(t => t.type === 'expense').length
-  const ordTxs = results.filter(t => t.expenseType === 'ordinario').length
-  const extTxs = results.filter(t => t.expenseType === 'extraordinario').length
-  console.log('[Parser] Resumen:', {
-    total: results.length,
-    ingresos: incomeTxs,
-    gastos: expenseTxs,
-    ordinarios: ordTxs,
-    extraordinarios: extTxs,
-  })
+    // Logging de resumen
+    const incomeTxs = results.filter(t => t.type === 'income').length
+    const expenseTxs = results.filter(t => t.type === 'expense').length
+    const ordTxs = results.filter(t => t.expenseType === 'ordinario').length
+    const extTxs = results.filter(t => t.expenseType === 'extraordinario').length
+    console.log('[Parser] Resumen:', {
+      total: results.length,
+      ingresos: incomeTxs,
+      gastos: expenseTxs,
+      ordinarios: ordTxs,
+      extraordinarios: extTxs,
+    })
 
-  return results
+    return results
+  } catch (err) {
+    console.error('[Parser] Error completo:', err)
+    throw err
+  }
 }
