@@ -95,7 +95,7 @@ function detectTC(text: string): number {
 /** Detecta la empresa por el nombre del concepto */
 function bizFromConcept(concept: string): { bizId: number; bizName: string } {
   const u = concept.toUpperCase()
-  if (u.includes('GUEMES') || u.includes('GÜEMES'))
+  if (u.includes('GUEMES') || u.includes('GÜEMES') || u.includes('IBC'))
     return { bizId: 1, bizName: 'GUEMES' }
   if (u.includes(' PDA') || u.startsWith('PDA') || u.includes('ALVARINAS'))
     return { bizId: 1, bizName: 'PDA' }
@@ -207,24 +207,46 @@ function parseDetail(lines: string[], periodDate: string, exchangeRate: number):
 
     const nums = extractNums(line)
     if (!nums.length) continue
-    const amount = nums[nums.length - 1]
-    if (amount <= 0) continue
 
     // Concepto = texto antes del primer número
     const firstDigit = line.search(/\d/)
     const concept = firstDigit > 0 ? line.slice(0, firstDigit).trim() : line.trim()
     if (!concept) continue
 
-    const { bizId, bizName } = bizFromConcept(concept)
-    results.push({
-      id: `pdf-${nextId++}`, selected: true, date: periodDate,
-      description: concept,
-      notes: `${bizName} | INGRESOS ORDINARIOS`,
-      type: 'income', amount,
-      businessId: bizId, businessName: bizName,
-      categoryName: INCOME_CATEGORY[bizName] ?? 'Otros ingresos',
-      expenseType: 'ordinario', currency: 'ARS', exchangeRate: null,
-    })
+    // Si el concepto ya menciona una empresa específica → 1 transacción con el mayor valor
+    const mentionsCompany = /SADIA|GUEMES|GÜEMES|IBC|PDA|ÑANCUL|NANCUL|EML/i.test(concept)
+    if (mentionsCompany || nums.length === 1) {
+      const amount = nums.length === 1 ? nums[0] : Math.max(...nums)
+      if (amount <= 0) continue
+      const { bizId, bizName } = bizFromConcept(concept)
+      results.push({
+        id: `pdf-${nextId++}`, selected: true, date: periodDate,
+        description: concept,
+        notes: `${bizName} | INGRESOS ORDINARIOS`,
+        type: 'income', amount,
+        businessId: bizId, businessName: bizName,
+        categoryName: INCOME_CATEGORY[bizName] ?? 'Otros ingresos',
+        expenseType: 'ordinario', currency: 'ARS', exchangeRate: null,
+      })
+    } else {
+      // Múltiples columnas por empresa: todos los valores excepto el último (total)
+      // se asignan a cada empresa según el orden de COMPANIES
+      const companyNums = nums.slice(0, Math.min(COMPANIES.length, nums.length - 1))
+      companyNums.forEach((amount, idx) => {
+        if (amount <= 0) return
+        const co = COMPANIES[idx]
+        if (!co) return
+        results.push({
+          id: `pdf-${nextId++}`, selected: true, date: periodDate,
+          description: concept,
+          notes: `${co.name} | INGRESOS ORDINARIOS`,
+          type: 'income', amount,
+          businessId: co.id, businessName: co.name,
+          categoryName: INCOME_CATEGORY[co.name] ?? 'Otros ingresos',
+          expenseType: 'ordinario', currency: 'ARS', exchangeRate: null,
+        })
+      })
+    }
   }
 
   // Si no encontramos ingresos individuales, usar el Total Ingresos
@@ -286,7 +308,11 @@ function parseDetail(lines: string[], periodDate: string, exchangeRate: number):
 
       const nums = extractNums(line)
       if (!nums.length) continue
-      const amount = nums[nums.length - 1] // último número = total de la fila
+      // Usar el mayor número de la fila: el total siempre es >= los parciales,
+      // y filtramos artefactos pequeños (nros de página, etc.) con umbral 10.
+      const validNums = nums.filter(n => n >= 10)
+      if (!validNums.length) continue
+      const amount = Math.max(...validNums)
       if (amount <= 0) continue
 
       // Concepto = texto antes del primer número
