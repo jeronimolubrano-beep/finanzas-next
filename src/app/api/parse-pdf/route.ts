@@ -10,6 +10,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File | null
     const period = formData.get('period') as string ?? ''
     const exchangeRate = parseFloat(formData.get('exchangeRate') as string ?? '0') || 0
+    const mode = (formData.get('mode') as string ?? 'summary') === 'detail' ? 'detail' : 'summary'
 
     if (!file) {
       return NextResponse.json({ error: 'No se recibió archivo' }, { status: 400 })
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    const transactions = await parsePdfReport(buffer, period, exchangeRate)
+    const transactions = await parsePdfReport(buffer, period, exchangeRate, mode)
 
     console.log('[API/parse-pdf] Transacciones parseadas:', transactions.length)
 

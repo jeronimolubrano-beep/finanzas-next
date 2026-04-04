@@ -28,6 +28,7 @@ export default function ImportPage() {
   const [saving, setSaving] = useState(false)
   const [importResult, setImportResult] = useState<{ inserted: number } | null>(null)
   const [dragActive, setDragActive] = useState(false)
+  const [pdfMode, setPdfMode] = useState<'summary' | 'detail'>('detail')
 
   // Cargar categorías y TC al montar
   useEffect(() => {
@@ -65,6 +66,7 @@ export default function ImportPage() {
         formData.append('file', file)
         formData.append('period', period)
         formData.append('exchangeRate', String(exchangeRate))
+        formData.append('mode', pdfMode)
 
         const res = await fetch('/api/parse-pdf', { method: 'POST', body: formData })
         const result = await res.json()
@@ -249,6 +251,43 @@ export default function ImportPage() {
                 TC activo: <strong style={{ color: '#6439ff' }}>${exchangeRate.toLocaleString('es-AR')}</strong> ARS/USD
               </p>
             )}
+          </div>
+
+          {/* Modo PDF */}
+          <div className="rounded-xl border p-4" style={{ background: '#fafaff', borderColor: '#e8e8f0' }}>
+            <p className="text-xs font-semibold uppercase mb-3" style={{ color: '#8b8ec0' }}>
+              Modo de importación PDF
+            </p>
+            <div className="flex gap-3 flex-wrap">
+              <button
+                onClick={() => setPdfMode('detail')}
+                className={`flex-1 min-w-[200px] rounded-xl p-3 text-left border-2 transition-all ${
+                  pdfMode === 'detail' ? 'border-[#6439ff]' : 'border-transparent'
+                }`}
+                style={{ background: pdfMode === 'detail' ? 'rgba(100,57,255,0.06)' : '#f0f0f8' }}
+              >
+                <p className="text-sm font-semibold" style={{ color: pdfMode === 'detail' ? '#6439ff' : '#1a1a2e' }}>
+                  📋 Detallado
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: '#8b8ec0' }}>
+                  Cada transacción individual (sueldos, proveedores, servicios, extraordinarios con fecha)
+                </p>
+              </button>
+              <button
+                onClick={() => setPdfMode('summary')}
+                className={`flex-1 min-w-[200px] rounded-xl p-3 text-left border-2 transition-all ${
+                  pdfMode === 'summary' ? 'border-[#6439ff]' : 'border-transparent'
+                }`}
+                style={{ background: pdfMode === 'summary' ? 'rgba(100,57,255,0.06)' : '#f0f0f8' }}
+              >
+                <p className="text-sm font-semibold" style={{ color: pdfMode === 'summary' ? '#6439ff' : '#1a1a2e' }}>
+                  📊 Resumido
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: '#8b8ec0' }}>
+                  Solo subtotales por categoría (Proveedores, Sueldos, Servicios…) — menos registros
+                </p>
+              </button>
+            </div>
           </div>
 
           {/* Drop zone */}
