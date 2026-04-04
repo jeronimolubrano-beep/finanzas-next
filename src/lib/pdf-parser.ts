@@ -104,15 +104,22 @@ export async function parsePdfReport(
   period: string,
   userExchangeRate: number,
 ): Promise<ParsedTransaction[]> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pdfParse = require('pdf-parse/lib/pdf-parse.js')
-  const data = await pdfParse(buffer)
-  const rawText: string = data.text
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfParse = require('pdf-parse/lib/pdf-parse.js')
+    console.log('[Parser] pdf-parse requerido exitosamente')
 
-  // ── Período y TC ──
-  const detectedPeriod = detectPeriod(rawText)
-  const effectivePeriod = period || detectedPeriod || ''
-  if (!effectivePeriod) throw new Error('No se pudo detectar el período del informe')
+    const data = await pdfParse(buffer)
+    console.log('[Parser] PDF parseado, páginas:', data.numpages, 'caracteres:', data.text.length)
+
+    const rawText: string = data.text
+
+    // ── Período y TC ──
+    const detectedPeriod = detectPeriod(rawText)
+    console.log('[Parser] Período detectado:', detectedPeriod)
+
+    const effectivePeriod = period || detectedPeriod || ''
+    if (!effectivePeriod) throw new Error('No se pudo detectar el período del informe')
 
   const pdfTC = detectTC(rawText)
   const exchangeRate = userExchangeRate > 0 ? userExchangeRate : pdfTC
@@ -315,6 +322,19 @@ export async function parsePdfReport(
 
   // Re-numerar IDs
   results.forEach((t, i) => { t.id = `pdf-${i + 1}` })
+
+  // Logging de resumen
+  const incomeTxs = results.filter(t => t.type === 'income').length
+  const expenseTxs = results.filter(t => t.type === 'expense').length
+  const ordTxs = results.filter(t => t.expenseType === 'ordinario').length
+  const extTxs = results.filter(t => t.expenseType === 'extraordinario').length
+  console.log('[Parser] Resumen:', {
+    total: results.length,
+    ingresos: incomeTxs,
+    gastos: expenseTxs,
+    ordinarios: ordTxs,
+    extraordinarios: extTxs,
+  })
 
   return results
 }
