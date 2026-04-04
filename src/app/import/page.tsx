@@ -709,7 +709,7 @@ function EditModal({
             <input
               type="text"
               value={draft.notes ?? ''}
-              onChange={e => set('notes', e.target.value || null)}
+              onChange={e => set('notes', e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm border"
               style={{ borderColor: '#e0e0ef', color: '#1a1a2e' }}
               placeholder="Opcional"
