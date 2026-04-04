@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { parseExcelCashflow, type ParsedTransaction } from '@/lib/excel-parser'
 import { saveImportedTransactions, getCategories, getSettingsExchangeRate } from './actions'
-import { parsePdfFile } from './pdf-action'
 import { formatMoney } from '@/lib/utils'
 import { Upload, FileSpreadsheet, FileText, CheckCircle, AlertTriangle, Loader2, Trash2, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
@@ -61,14 +60,17 @@ export default function ImportPage() {
 
     try {
       if (isPdf) {
-        // PDF: enviar al server para parseo con pdf-parse
+        // PDF: enviar a API Route /api/parse-pdf
         const formData = new FormData()
         formData.append('file', file)
+        formData.append('period', period)
+        formData.append('exchangeRate', String(exchangeRate))
 
-        const result = await parsePdfFile(formData, period, exchangeRate)
+        const res = await fetch('/api/parse-pdf', { method: 'POST', body: formData })
+        const result = await res.json()
 
-        if (result.error) {
-          toast.error(result.error)
+        if (!res.ok || result.error) {
+          toast.error(result.error ?? 'Error al procesar el PDF')
           setLoading(false)
           return
         }
