@@ -679,8 +679,7 @@ function EditModal({
               <select
                 value={draft.type}
                 onChange={e => {
-                  set('type', e.target.value as 'income' | 'expense')
-                  set('categoryName', null)
+                  setDraft(prev => ({ ...prev, type: e.target.value as 'income' | 'expense', categoryName: null }))
                 }}
                 className="w-full rounded-lg px-3 py-2 text-sm border"
                 style={{ borderColor: '#e0e0ef', color: '#1a1a2e' }}
@@ -769,7 +768,7 @@ function EditModal({
                 value={draft.businessName ?? ''}
                 onChange={e => {
                   const biz = BUSINESSES.find(b => b.name === e.target.value)
-                  setDraft(prev => ({ ...prev, businessName: biz?.name ?? null, businessId: biz?.id ?? null }))
+                  if (biz) setDraft(prev => ({ ...prev, businessName: biz.name, businessId: biz.id }))
                 }}
                 className="w-full rounded-lg px-3 py-2 text-sm border"
                 style={{ borderColor: '#e0e0ef', color: '#1a1a2e' }}
