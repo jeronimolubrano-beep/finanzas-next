@@ -55,8 +55,15 @@ function parseArgNumber(str: string): number {
   return neg ? -n : n
 }
 
+/**
+ * Extrae números en formato argentino estricto: \d{1,3}(?:\.\d{3})*
+ * Esto separa correctamente números pegados que genera pdf-parse en tablas:
+ * "1.445.1701.445.170" → ["1.445.170","1.445.170"] en vez de un número gigante.
+ */
 function extractNums(line: string): number[] {
-  return (line.match(/[\d.,]+/g) ?? []).map(parseArgNumber).filter(n => n >= 0)
+  return (line.match(/\d{1,3}(?:\.\d{3})*(?:,\d+)?/g) ?? [])
+    .map(parseArgNumber)
+    .filter(n => n >= 0)
 }
 
 function parseDate(s: string): string {
