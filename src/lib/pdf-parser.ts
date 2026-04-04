@@ -66,6 +66,18 @@ function extractNums(line: string): number[] {
     .filter(n => n >= 0)
 }
 
+/**
+ * Elimina patrones de fecha de una línea antes de extraer montos.
+ * Evita que "10/202450.000" sea interpretado como "10" + "202" + "450.000".
+ * Soporta: dd/mm/yyyy, mm/yyyy, dd/mm/yy
+ */
+function stripDates(line: string): string {
+  return line
+    .replace(/\d{1,2}\/\d{1,2}\/\d{4}/g, ' ')   // dd/mm/yyyy
+    .replace(/\d{1,2}\/\d{1,2}\/\d{2}/g,   ' ')   // dd/mm/yy
+    .replace(/\d{1,2}\/\d{4}/g,             ' ')   // mm/yyyy o vto MM/YYYY
+}
+
 function parseDate(s: string): string {
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (!m) return ''
@@ -205,10 +217,10 @@ function parseDetail(lines: string[], periodDate: string, exchangeRate: number):
     const isIncomeLine = INCOME_PREFIXES.some(p => u.startsWith(p))
     if (!isIncomeLine) continue
 
-    const nums = extractNums(line)
+    const nums = extractNums(stripDates(line))
     if (!nums.length) continue
 
-    // Concepto = texto antes del primer número
+    // Concepto = texto antes del primer número (en la línea original sin stripear)
     const firstDigit = line.search(/\d/)
     const concept = firstDigit > 0 ? line.slice(0, firstDigit).trim() : line.trim()
     if (!concept) continue
@@ -306,10 +318,12 @@ function parseDetail(lines: string[], periodDate: string, exchangeRate: number):
           u === 'SADIA' || u === 'GUEMES' || u === 'PDA' ||
           u === 'ÑANCUL' || u === 'EML' || u === sec.header) continue
 
-      const nums = extractNums(line)
+      // Limpiar fechas antes de extraer montos para evitar que "10/202450.000"
+      // sea parseado como 450.000 en vez de 50.000.
+      const nums = extractNums(stripDates(line))
       if (!nums.length) continue
-      // Usar el mayor número de la fila: el total siempre es >= los parciales,
-      // y filtramos artefactos pequeños (nros de página, etc.) con umbral 10.
+      // Usar el mayor número de la fila (el total es siempre el más grande);
+      // filtrar artefactos pequeños (nros de página, etc.) con umbral 10.
       const validNums = nums.filter(n => n >= 10)
       if (!validNums.length) continue
       const amount = Math.max(...validNums)
