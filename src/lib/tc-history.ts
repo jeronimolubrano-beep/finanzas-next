@@ -7,31 +7,51 @@
  */
 
 export interface TCHistorico {
-  period: string   // YYYY-MM
-  oficial: number  // promedio mensual TC oficial BNA vendedor
-  blue: number     // promedio mensual TC blue venta
+  period: string
+  oficial: number
+  blue: number
   oficialFuente: string
   blueFuente: string
 }
 
 // ─── BCRA ─────────────────────────────────────────────────────────────────────
 
-interface BCRAResult {
-  fecha: string
-  valor: number
-}
-
 async function fetchOficial(desde: string, hasta: string): Promise<number> {
+  // Variable 4 = Tipo de cambio de referencia (BNA vendedor, Com. A 3500)
   const url = `https://api.bcra.gob.ar/estadisticas/v2.0/datosvariable/4/${desde}/${hasta}`
+  console.log('[TC BCRA] GET', url)
+
   const res = await fetch(url, {
-    headers: { Accept: 'application/json' },
-    next: { revalidate: 3600 },
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'finanzas-next/1.0',
+    },
+    // No cache para datos históricos puntuales
+    cache: 'no-store',
   })
-  if (!res.ok) throw new Error(`BCRA ${res.status}`)
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    console.error('[TC BCRA] Error', res.status, body.slice(0, 200))
+    throw new Error(`BCRA ${res.status}`)
+  }
+
   const json = await res.json()
-  const rows: BCRAResult[] = json.results ?? []
-  if (!rows.length) return 0
-  const avg = rows.reduce((s, r) => s + r.valor, 0) / rows.length
+  console.log('[TC BCRA] Respuesta:', JSON.stringify(json).slice(0, 300))
+
+  // La respuesta puede estar en json.results o json.data o ser el array directamente
+  const rows: { fecha?: string; valor?: number; value?: number }[] =
+    json.results ?? json.data ?? (Array.isArray(json) ? json : [])
+
+  if (!rows.length) {
+    console.warn('[TC BCRA] Sin datos para el período', desde, hasta)
+    return 0
+  }
+
+  const valores = rows.map(r => r.valor ?? r.value ?? 0).filter(v => v > 0)
+  if (!valores.length) return 0
+
+  const avg = valores.reduce((s, v) => s + v, 0) / valores.length
   return Math.round(avg * 100) / 100
 }
 
@@ -45,20 +65,26 @@ interface BluelyticsEntry {
 }
 
 async function fetchBlue(desde: string, hasta: string): Promise<number> {
-  // Calcular cuántos días pedir desde hoy hasta la fecha de inicio del período
-  const daysBack = Math.ceil(
-    (Date.now() - new Date(desde).getTime()) / (1000 * 60 * 60 * 24)
-  ) + 31 // +31 para cubrir el mes completo
+  // Sin parámetro `days` para obtener TODO el histórico disponible
+  // (con days=N la API limita y puede no llegar a fechas antiguas)
+  const url = 'https://api.bluelytics.com.ar/v2/evolution.json'
+  console.log('[TC Bluelytics] GET', url, '| filtrando', desde, '-', hasta)
 
-  const url = `https://api.bluelytics.com.ar/v2/evolution.json?days=${daysBack}`
-  const res = await fetch(url, { next: { revalidate: 3600 } })
-  if (!res.ok) throw new Error(`Bluelytics ${res.status}`)
+  const res = await fetch(url, { cache: 'no-store' })
+
+  if (!res.ok) {
+    console.error('[TC Bluelytics] Error', res.status)
+    throw new Error(`Bluelytics ${res.status}`)
+  }
 
   const data: BluelyticsEntry[] = await res.json()
+  console.log('[TC Bluelytics] Total entradas:', data.length, '| primera:', data[0]?.date, '| última:', data[data.length - 1]?.date)
 
   const inPeriod = data.filter(
     e => e.source === 'Blue' && e.date >= desde && e.date <= hasta
   )
+  console.log('[TC Bluelytics] Entradas en período:', inPeriod.length)
+
   if (!inPeriod.length) return 0
 
   const avg = inPeriod.reduce((s, e) => s + e.value_sell, 0) / inPeriod.length
@@ -73,10 +99,15 @@ export async function getTCHistorico(period: string): Promise<TCHistorico> {
   const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate()
   const hasta = `${year}-${month}-${String(lastDay).padStart(2, '0')}`
 
+  console.log('[TC Histórico] Período:', period, '| Desde:', desde, '| Hasta:', hasta)
+
   const [oficialResult, blueResult] = await Promise.allSettled([
     fetchOficial(desde, hasta),
     fetchBlue(desde, hasta),
   ])
+
+  if (oficialResult.status === 'rejected') console.error('[TC Oficial] Falló:', oficialResult.reason)
+  if (blueResult.status === 'rejected') console.error('[TC Blue] Falló:', blueResult.reason)
 
   return {
     period,
