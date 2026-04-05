@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 
 export async function proxy(request: NextRequest) {
   const publicRoutes = ['/login', '/signup', '/forgot-password', '/reset-password']
-  const apiAuthRoutes = /^\/api\/(auth|ocr|pending-count|parse-pdf)/
+  const apiAuthRoutes = /^\/api\/(auth|ocr|pending-count|parse-pdf|tc-history)/
 
   const pathname = request.nextUrl.pathname
 

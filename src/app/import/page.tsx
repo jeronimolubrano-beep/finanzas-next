@@ -30,12 +30,29 @@ export default function ImportPage() {
   const [dragActive, setDragActive] = useState(false)
   const [pdfMode, setPdfMode] = useState<'summary' | 'detail'>('detail')
   const [editingTx, setEditingTx] = useState<ParsedTransaction | null>(null)
+  const [tcHistorico, setTcHistorico] = useState<{ oficial: number; blue: number } | null>(null)
+  const [tcLoading, setTcLoading] = useState(false)
+  const [tcMode, setTcMode] = useState<'settings' | 'oficial' | 'blue'>('settings')
 
   // Cargar categorías y TC al montar
   useEffect(() => {
     getCategories().then(setCategories)
     getSettingsExchangeRate().then(setExchangeRate)
   }, [])
+
+  // Consultar TC histórico cuando cambia el período
+  useEffect(() => {
+    if (!period) return
+    setTcHistorico(null)
+    setTcLoading(true)
+    fetch(`/api/tc-history?period=${period}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.oficial || data.blue) setTcHistorico({ oficial: data.oficial, blue: data.blue })
+      })
+      .catch(() => {})
+      .finally(() => setTcLoading(false))
+  }, [period])
 
   // Generar período default (mes anterior)
   useEffect(() => {
@@ -47,6 +64,12 @@ export default function ImportPage() {
       setPeriod(`${y}-${m}`)
     }
   }, [period])
+
+  // TC efectivo según modo seleccionado
+  const effectiveTC =
+    tcMode === 'oficial' && tcHistorico?.oficial ? tcHistorico.oficial :
+    tcMode === 'blue'    && tcHistorico?.blue    ? tcHistorico.blue    :
+    exchangeRate
 
   const processFile = useCallback(async (file: File) => {
     if (!period) {
@@ -66,7 +89,7 @@ export default function ImportPage() {
         const formData = new FormData()
         formData.append('file', file)
         formData.append('period', period)
-        formData.append('exchangeRate', String(exchangeRate))
+        formData.append('exchangeRate', String(effectiveTC))
         formData.append('mode', pdfMode)
 
         const res = await fetch('/api/parse-pdf', { method: 'POST', body: formData })
@@ -119,7 +142,7 @@ export default function ImportPage() {
       toast.error('Error al procesar el archivo')
     }
     setLoading(false)
-  }, [period, exchangeRate])
+  }, [period, effectiveTC, pdfMode])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -239,24 +262,108 @@ export default function ImportPage() {
       {step === 'upload' && (
         <div className="space-y-6">
           {/* Config */}
-          <div className="flex flex-wrap items-end gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: '#4a4a6a' }}>
-                Período (año-mes)
-              </label>
-              <input
-                type="month"
-                value={period}
-                onChange={e => setPeriod(e.target.value)}
-                className="rounded-lg px-3 py-2.5 text-sm border"
-                style={{ borderColor: '#e0e0ef', background: '#fafaff' }}
-              />
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-end gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: '#4a4a6a' }}>
+                  Período (año-mes)
+                </label>
+                <input
+                  type="month"
+                  value={period}
+                  onChange={e => setPeriod(e.target.value)}
+                  className="rounded-lg px-3 py-2.5 text-sm border"
+                  style={{ borderColor: '#e0e0ef', background: '#fafaff' }}
+                />
+              </div>
             </div>
-            {exchangeRate > 0 && (
-              <p className="text-xs pb-2.5" style={{ color: '#8b8ec0' }}>
-                TC activo: <strong style={{ color: '#6439ff' }}>${exchangeRate.toLocaleString('es-AR')}</strong> ARS/USD
-              </p>
-            )}
+
+            {/* Selector TC histórico */}
+            <div className="rounded-xl border p-4" style={{ background: '#fafaff', borderColor: '#e8e8f0' }}>
+              <div className="flex items-center gap-2 mb-3">
+                <p className="text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>
+                  Tipo de cambio para conversión USD
+                </p>
+                {tcLoading && (
+                  <Loader2 className="w-3 h-3 animate-spin" style={{ color: '#8b8ec0' }} />
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {/* Settings TC */}
+                <button
+                  onClick={() => setTcMode('settings')}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 text-xs transition-all ${
+                    tcMode === 'settings' ? 'border-[#6439ff]' : 'border-transparent'
+                  }`}
+                  style={{ background: tcMode === 'settings' ? 'rgba(100,57,255,0.07)' : '#f0f0f8' }}
+                >
+                  <span className="font-semibold" style={{ color: tcMode === 'settings' ? '#6439ff' : '#1a1a2e' }}>
+                    Configuración
+                  </span>
+                  {exchangeRate > 0 && (
+                    <span className="tabular-nums" style={{ color: '#8b8ec0' }}>
+                      ${exchangeRate.toLocaleString('es-AR')}
+                    </span>
+                  )}
+                </button>
+
+                {/* TC Oficial */}
+                <button
+                  onClick={() => setTcMode('oficial')}
+                  disabled={!tcHistorico?.oficial}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                    tcMode === 'oficial' ? 'border-[#2edbc1]' : 'border-transparent'
+                  }`}
+                  style={{ background: tcMode === 'oficial' ? 'rgba(46,219,193,0.07)' : '#f0f0f8' }}
+                >
+                  <span className="font-semibold" style={{ color: tcMode === 'oficial' ? '#1aab96' : '#1a1a2e' }}>
+                    🏦 Oficial BCRA
+                  </span>
+                  {tcHistorico?.oficial ? (
+                    <span className="tabular-nums" style={{ color: '#8b8ec0' }}>
+                      ${tcHistorico.oficial.toLocaleString('es-AR')}
+                    </span>
+                  ) : tcLoading ? (
+                    <span style={{ color: '#8b8ec0' }}>...</span>
+                  ) : (
+                    <span style={{ color: '#ccc' }}>N/D</span>
+                  )}
+                </button>
+
+                {/* TC Blue */}
+                <button
+                  onClick={() => setTcMode('blue')}
+                  disabled={!tcHistorico?.blue}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                    tcMode === 'blue' ? 'border-[#6439ff]' : 'border-transparent'
+                  }`}
+                  style={{ background: tcMode === 'blue' ? 'rgba(100,57,255,0.07)' : '#f0f0f8' }}
+                >
+                  <span className="font-semibold" style={{ color: tcMode === 'blue' ? '#6439ff' : '#1a1a2e' }}>
+                    💵 Blue
+                  </span>
+                  {tcHistorico?.blue ? (
+                    <span className="tabular-nums" style={{ color: '#8b8ec0' }}>
+                      ${tcHistorico.blue.toLocaleString('es-AR')}
+                    </span>
+                  ) : tcLoading ? (
+                    <span style={{ color: '#8b8ec0' }}>...</span>
+                  ) : (
+                    <span style={{ color: '#ccc' }}>N/D</span>
+                  )}
+                </button>
+              </div>
+
+              {/* TC efectivo */}
+              {effectiveTC > 0 && (
+                <p className="text-xs mt-2.5" style={{ color: '#8b8ec0' }}>
+                  TC a usar:{' '}
+                  <strong style={{ color: '#6439ff' }}>
+                    ${effectiveTC.toLocaleString('es-AR')} ARS/USD
+                  </strong>
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Modo PDF */}
