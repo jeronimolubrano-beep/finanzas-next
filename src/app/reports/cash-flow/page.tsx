@@ -3,6 +3,8 @@ import { formatMoney } from '@/lib/utils'
 import { TransactionDetail } from './TransactionDetail'
 import { CashFlowChart } from './CashFlowChart'
 import { ExportButtons } from './ExportButtons'
+import { Suspense } from 'react'
+import { TCSelector } from '@/components/TCSelector'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -87,7 +89,7 @@ function buildFlowData(txs: AnyTx[]) {
 export default async function CashFlowPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; business?: string }>
+  searchParams: Promise<{ month?: string; business?: string; tcMode?: string; tcValue?: string }>
 }) {
   const params   = await searchParams
   const supabase = await createClient()
@@ -120,7 +122,10 @@ export default async function CashFlowPage({
   const { data: settings } = await supabase.from('settings').select('*')
   const settingsMap: Record<string, string> = {}
   for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
-  const tcRate = parseFloat(settingsMap.current_rate) || 0
+  const settingsTcRate = parseFloat(settingsMap.current_rate) || 0
+  const tcDate = settingsMap.rate_date || ''
+  const tcType = settingsMap.rate_type || ''
+  const tcRate = params.tcValue ? parseFloat(params.tcValue) : settingsTcRate
   const hasTC  = tcRate > 0
 
   // ── Fetch all PERCIBIDO transactions up to end of period ───────────────────
@@ -238,11 +243,6 @@ export default async function CashFlowPage({
           </h1>
           <p className="text-base font-medium mt-0.5" style={{ color: C_MUTED }}>
             {businessLabel} · {monthLabel}
-            {hasTC && (
-              <span className="ml-3 text-xs font-normal">
-                TC: ${tcRate.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-              </span>
-            )}
           </p>
           <p className="text-xs mt-1" style={{ color: '#b0b4d0' }}>
             Solo incluye movimientos de efectivo real (transacciones percibidas/pagadas)
@@ -286,6 +286,16 @@ export default async function CashFlowPage({
           />
         </div>
       </div>
+
+      {/* Selector TC */}
+      <Suspense fallback={null}>
+        <TCSelector
+          period={selectedMonth}
+          settingsTc={settingsTcRate}
+          settingsDate={tcDate}
+          settingsType={tcType}
+        />
+      </Suspense>
 
       {/* ── KPI CARDS ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

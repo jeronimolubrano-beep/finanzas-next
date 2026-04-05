@@ -2,11 +2,13 @@ import { createClient } from '@/lib/supabase/server'
 import { formatMoney0 } from '@/lib/utils'
 import { DollarSign } from 'lucide-react'
 import { TaxSection, type CategoryBreakdown } from './TaxSection'
+import { Suspense } from 'react'
+import { TCSelector } from '@/components/TCSelector'
 
 export default async function IncomeStatementPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string; business_id?: string; sort?: string }>
+  searchParams: Promise<{ year?: string; business_id?: string; sort?: string; tcMode?: string; tcValue?: string }>
 }) {
   const params = await searchParams
   const supabase = await createClient()
@@ -49,14 +51,20 @@ export default async function IncomeStatementPage({
   const { data: settings } = await supabase.from('settings').select('*')
   const settingsMap: Record<string, string> = {}
   for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
-  const tcRate = parseFloat(settingsMap.current_rate) || 0
+  const settingsTcRate = parseFloat(settingsMap.current_rate) || 0
   const tcDate = settingsMap.rate_date || ''
   const tcType = settingsMap.rate_type || ''
+
+  // TC efectivo: override desde URL (cuando el usuario eligió Oficial o Blue) o settings
+  const tcRate = params.tcValue ? parseFloat(params.tcValue) : settingsTcRate
   const hasTC = tcRate > 0
 
   function toUSD(ars: number): string {
     return (ars / tcRate).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   }
+
+  // Período representativo para TC histórico: diciembre del año seleccionado
+  const tcPeriod = `${selectedYear}-12`
 
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
   const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
@@ -121,6 +129,18 @@ export default async function IncomeStatementPage({
             Filtrar
           </button>
         </form>
+      </div>
+
+      {/* Selector de TC */}
+      <div className="mb-4">
+        <Suspense fallback={null}>
+          <TCSelector
+            period={tcPeriod}
+            settingsTc={settingsTcRate}
+            settingsDate={tcDate}
+            settingsType={tcType}
+          />
+        </Suspense>
       </div>
 
       {/* Tabla anual */}
@@ -230,7 +250,10 @@ export default async function IncomeStatementPage({
             <DollarSign className="w-4 h-4" style={{ color: '#6439ff' }} />
             <span className="text-sm font-semibold" style={{ color: '#6439ff' }}>Resumen anual en USD</span>
             <span className="text-xs sm:ml-auto" style={{ color: '#8b8ec0' }}>
-              TC: ${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })} ({tcType}) al {tcDate}
+              TC: ${tcRate.toLocaleString('es-AR')} ·{' '}
+              {params.tcMode === 'oficial' ? `Oficial prom. ${tcPeriod}` :
+               params.tcMode === 'blue'    ? `Blue prom. ${tcPeriod}`    :
+               `${tcType} al ${tcDate}`}
             </span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

@@ -3,6 +3,8 @@ import { formatMoney, statusLabel, dueDateUrgency, daysUntilDue, formatDateAR, f
 import Link from 'next/link'
 import { PlusCircle, Pencil, Trash2 } from 'lucide-react'
 import { DeleteButton } from './DeleteButton'
+import { Suspense } from 'react'
+import { TCSelector } from '@/components/TCSelector'
 
 export default async function TransactionsPage({
   searchParams,
@@ -15,6 +17,8 @@ export default async function TransactionsPage({
     category_id?: string
     sort?: string
     currency?: string
+    tcMode?: string
+    tcValue?: string
   }>
 }) {
   const params = await searchParams
@@ -54,8 +58,16 @@ export default async function TransactionsPage({
   const { data: settings } = await supabase.from('settings').select('*')
   const settingsMap: Record<string, string> = {}
   for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
-  const tcRate = parseFloat(settingsMap.current_rate) || 0
+  const settingsTcRate = parseFloat(settingsMap.current_rate) || 0
+  const tcDate = settingsMap.rate_date || ''
+  const tcType = settingsMap.rate_type || ''
+  const tcRate = params.tcValue ? parseFloat(params.tcValue) : settingsTcRate
   const hasTC = tcRate > 0
+
+  // Período representativo para TC histórico: mes filtrado o mes actual
+  const now = new Date()
+  const tcPeriod = params.month
+    ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
   function toARS(t: { amount: number | string; currency?: string; exchange_rate?: number | null }): number {
     const amt = Number(t.amount)
@@ -154,6 +166,18 @@ export default async function TransactionsPage({
           </div>
         </div>
       </form>
+
+      {/* Selector TC */}
+      <div className="mb-4">
+        <Suspense fallback={null}>
+          <TCSelector
+            period={tcPeriod}
+            settingsTc={settingsTcRate}
+            settingsDate={tcDate}
+            settingsType={tcType}
+          />
+        </Suspense>
+      </div>
 
       {/* Tabla */}
       <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
