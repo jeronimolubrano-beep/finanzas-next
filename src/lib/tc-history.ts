@@ -2,8 +2,9 @@
  * TC Histórico — consulta tipo de cambio ARS/USD para un período pasado.
  *
  * Fuentes:
- *  - Oficial: BCRA API (variable 4 = TC referencia BNA vendedor)
- *  - Blue:    Bluelytics API (dólar blue venta)
+ *  - Oficial: ArgentinaDatos API (mirror del BCRA, sin problemas de SSL)
+ *             https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial/{año}/{mes}
+ *  - Blue:    Bluelytics API — dólar blue venta (promedio mensual)
  */
 
 export interface TCHistorico {
@@ -14,48 +15,38 @@ export interface TCHistorico {
   blueFuente: string
 }
 
-// ─── BCRA ─────────────────────────────────────────────────────────────────────
+// ─── Oficial (ArgentinaDatos) ─────────────────────────────────────────────────
 
-async function fetchOficial(desde: string, hasta: string): Promise<number> {
-  // Variable 4 = Tipo de cambio de referencia (BNA vendedor, Com. A 3500)
-  const url = `https://api.bcra.gob.ar/estadisticas/v2.0/datosvariable/4/${desde}/${hasta}`
-  console.log('[TC BCRA] GET', url)
+interface ArgentinaDatosCotizacion {
+  fecha: string   // "YYYY-MM-DD"
+  compra: number
+  venta: number
+}
 
-  const res = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-      'User-Agent': 'finanzas-next/1.0',
-    },
-    // No cache para datos históricos puntuales
-    cache: 'no-store',
-  })
+async function fetchOficial(year: string, month: string): Promise<number> {
+  const url = `https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial/${year}/${month}`
+  console.log('[TC Oficial] GET', url)
+
+  const res = await fetch(url, { cache: 'no-store' })
 
   if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    console.error('[TC BCRA] Error', res.status, body.slice(0, 200))
-    throw new Error(`BCRA ${res.status}`)
+    console.error('[TC Oficial] Error', res.status, await res.text().catch(() => ''))
+    throw new Error(`ArgentinaDatos ${res.status}`)
   }
 
-  const json = await res.json()
-  console.log('[TC BCRA] Respuesta:', JSON.stringify(json).slice(0, 300))
+  const data: ArgentinaDatosCotizacion[] = await res.json()
+  console.log('[TC Oficial] Entradas:', data.length, '| muestra:', data[0])
 
-  // La respuesta puede estar en json.results o json.data o ser el array directamente
-  const rows: { fecha?: string; valor?: number; value?: number }[] =
-    json.results ?? json.data ?? (Array.isArray(json) ? json : [])
+  if (!Array.isArray(data) || !data.length) return 0
 
-  if (!rows.length) {
-    console.warn('[TC BCRA] Sin datos para el período', desde, hasta)
-    return 0
-  }
+  const ventas = data.map(d => d.venta).filter(v => v > 0)
+  if (!ventas.length) return 0
 
-  const valores = rows.map(r => r.valor ?? r.value ?? 0).filter(v => v > 0)
-  if (!valores.length) return 0
-
-  const avg = valores.reduce((s, v) => s + v, 0) / valores.length
+  const avg = ventas.reduce((s, v) => s + v, 0) / ventas.length
   return Math.round(avg * 100) / 100
 }
 
-// ─── Bluelytics ───────────────────────────────────────────────────────────────
+// ─── Blue (Bluelytics) ────────────────────────────────────────────────────────
 
 interface BluelyticsEntry {
   date: string
@@ -65,25 +56,24 @@ interface BluelyticsEntry {
 }
 
 async function fetchBlue(desde: string, hasta: string): Promise<number> {
-  // Sin parámetro `days` para obtener TODO el histórico disponible
-  // (con days=N la API limita y puede no llegar a fechas antiguas)
+  // Sin ?days para traer todo el histórico disponible y filtrar por fecha
   const url = 'https://api.bluelytics.com.ar/v2/evolution.json'
-  console.log('[TC Bluelytics] GET', url, '| filtrando', desde, '-', hasta)
+  console.log('[TC Blue] GET', url, '→ filtrando', desde, '-', hasta)
 
   const res = await fetch(url, { cache: 'no-store' })
 
   if (!res.ok) {
-    console.error('[TC Bluelytics] Error', res.status)
+    console.error('[TC Blue] Error', res.status)
     throw new Error(`Bluelytics ${res.status}`)
   }
 
   const data: BluelyticsEntry[] = await res.json()
-  console.log('[TC Bluelytics] Total entradas:', data.length, '| primera:', data[0]?.date, '| última:', data[data.length - 1]?.date)
+  console.log('[TC Blue] Total entradas:', data.length, '| rango:', data[data.length - 1]?.date, '→', data[0]?.date)
 
   const inPeriod = data.filter(
     e => e.source === 'Blue' && e.date >= desde && e.date <= hasta
   )
-  console.log('[TC Bluelytics] Entradas en período:', inPeriod.length)
+  console.log('[TC Blue] En período:', inPeriod.length)
 
   if (!inPeriod.length) return 0
 
@@ -99,21 +89,21 @@ export async function getTCHistorico(period: string): Promise<TCHistorico> {
   const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate()
   const hasta = `${year}-${month}-${String(lastDay).padStart(2, '0')}`
 
-  console.log('[TC Histórico] Período:', period, '| Desde:', desde, '| Hasta:', hasta)
+  console.log('[TC Histórico] Período:', period)
 
   const [oficialResult, blueResult] = await Promise.allSettled([
-    fetchOficial(desde, hasta),
+    fetchOficial(year, month),
     fetchBlue(desde, hasta),
   ])
 
   if (oficialResult.status === 'rejected') console.error('[TC Oficial] Falló:', oficialResult.reason)
-  if (blueResult.status === 'rejected') console.error('[TC Blue] Falló:', blueResult.reason)
+  if (blueResult.status === 'rejected')   console.error('[TC Blue] Falló:', blueResult.reason)
 
   return {
     period,
     oficial: oficialResult.status === 'fulfilled' ? oficialResult.value : 0,
-    blue: blueResult.status === 'fulfilled' ? blueResult.value : 0,
-    oficialFuente: 'BCRA (Com. A 3500 — promedio mensual)',
-    blueFuente: 'Bluelytics — promedio mensual venta',
+    blue:    blueResult.status    === 'fulfilled' ? blueResult.value    : 0,
+    oficialFuente: 'ArgentinaDatos — BNA vendedor, promedio mensual',
+    blueFuente:    'Bluelytics — blue venta, promedio mensual',
   }
 }
