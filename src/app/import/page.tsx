@@ -29,6 +29,8 @@ export default function ImportPage() {
   const [importResult, setImportResult] = useState<{ inserted: number } | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const [pdfMode, setPdfMode] = useState<'summary' | 'detail'>('detail')
+  const [useAIMode, setUseAIMode] = useState(false)
+  const [aiNotes, setAiNotes] = useState<string | null>(null)
   const [editingTx, setEditingTx] = useState<ParsedTransaction | null>(null)
   const [tcHistorico, setTcHistorico] = useState<{ oficial: number; blue: number } | null>(null)
   const [tcLoading, setTcLoading] = useState(false)
@@ -84,8 +86,42 @@ export default function ImportPage() {
     const isPdf = ext === 'pdf'
 
     try {
-      if (isPdf) {
-        // PDF: enviar a API Route /api/parse-pdf
+      if (useAIMode) {
+        // ── Modo IA: Claude parsea cualquier PDF o Excel ───────────────────
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('period', period)
+        formData.append('exchangeRate', String(effectiveTC))
+        formData.append('mode', pdfMode)
+
+        const res = await fetch('/api/ai-parse', { method: 'POST', body: formData })
+        const result = await res.json()
+
+        if (!res.ok || result.error) {
+          toast.error(result.error ?? 'Error al procesar el archivo con IA')
+          setLoading(false)
+          return
+        }
+
+        if (!result.transactions || result.transactions.length === 0) {
+          toast.error('Claude no encontró transacciones en el documento')
+          setLoading(false)
+          return
+        }
+
+        if (result.notes) setAiNotes(result.notes)
+        if (result.detectedPeriod && result.detectedPeriod !== period) {
+          toast(`Período detectado: ${result.detectedPeriod}`, { icon: '📅' })
+        }
+        if (result.detectedExchangeRate && result.detectedExchangeRate !== effectiveTC) {
+          toast(`TC detectado en el doc: $${result.detectedExchangeRate}`, { icon: '💱' })
+        }
+
+        setTransactions(result.transactions)
+        setStep('preview')
+        toast.success(`✨ Claude extrajo ${result.transactions.length} transacciones`)
+      } else if (isPdf) {
+        // ── Modo clásico PDF ───────────────────────────────────────────────
         const formData = new FormData()
         formData.append('file', file)
         formData.append('period', period)
@@ -111,7 +147,7 @@ export default function ImportPage() {
         setStep('preview')
         toast.success(`Se parsearon ${result.transactions.length} transacciones del PDF`)
       } else {
-        // Excel: parseo client-side con xlsx
+        // ── Modo clásico Excel ────────────────────────────────────────────
         const reader = new FileReader()
         reader.onload = (e) => {
           try {
@@ -142,7 +178,7 @@ export default function ImportPage() {
       toast.error('Error al procesar el archivo')
     }
     setLoading(false)
-  }, [period, effectiveTC, pdfMode])
+  }, [period, effectiveTC, pdfMode, useAIMode])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -366,10 +402,56 @@ export default function ImportPage() {
             </div>
           </div>
 
+          {/* Toggle Modo IA */}
+          <div
+            className="rounded-xl border p-4 transition-all"
+            style={{
+              background: useAIMode ? 'rgba(100,57,255,0.05)' : '#fafaff',
+              borderColor: useAIMode ? '#6439ff' : '#e8e8f0',
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">✨</span>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: useAIMode ? '#6439ff' : '#1a1a2e' }}>
+                    Modo IA — Importación inteligente con Claude
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: '#8b8ec0' }}>
+                    Claude lee el documento y extrae las transacciones automáticamente,
+                    sin importar el formato. Funciona con PDF y Excel.
+                  </p>
+                </div>
+              </div>
+              {/* Toggle switch */}
+              <button
+                onClick={() => setUseAIMode(v => !v)}
+                className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200"
+                style={{ background: useAIMode ? '#6439ff' : '#d1d5db' }}
+                aria-pressed={useAIMode}
+              >
+                <span
+                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200"
+                  style={{ transform: useAIMode ? 'translateX(20px)' : 'translateX(0)' }}
+                />
+              </button>
+            </div>
+            {useAIMode && (
+              <div className="mt-3 flex items-start gap-2 text-xs rounded-lg px-3 py-2"
+                style={{ background: 'rgba(100,57,255,0.08)', color: '#6439ff' }}>
+                <span>💡</span>
+                <span>
+                  El modo IA puede tardar 10–30 segundos según el tamaño del documento.
+                  Revisá las transacciones en el paso siguiente antes de importar.
+                </span>
+              </div>
+            )}
+          </div>
+
           {/* Modo PDF */}
           <div className="rounded-xl border p-4" style={{ background: '#fafaff', borderColor: '#e8e8f0' }}>
             <p className="text-xs font-semibold uppercase mb-3" style={{ color: '#8b8ec0' }}>
-              Modo de importación PDF
+              {useAIMode ? 'Detalle de extracción (aplica en Modo IA también)' : 'Modo de importación PDF'}
             </p>
             <div className="flex gap-3 flex-wrap">
               <button
@@ -475,6 +557,19 @@ export default function ImportPage() {
       {/* STEP 2: Preview */}
       {step === 'preview' && (
         <div className="space-y-4">
+          {/* Banner de notas de IA */}
+          {useAIMode && aiNotes && (
+            <div className="flex items-start gap-3 rounded-xl border px-4 py-3 text-sm"
+              style={{ background: 'rgba(100,57,255,0.06)', borderColor: '#c4b5fd', color: '#4a2fbf' }}>
+              <span className="text-base flex-shrink-0">✨</span>
+              <div>
+                <p className="font-semibold text-xs uppercase mb-1" style={{ color: '#6439ff' }}>
+                  Observaciones de Claude
+                </p>
+                <p className="text-xs" style={{ color: '#4a2fbf' }}>{aiNotes}</p>
+              </div>
+            </div>
+          )}
           {/* Summary bar */}
           <div className="flex flex-wrap items-center gap-4 rounded-xl border p-4" style={{ background: '#fafaff', borderColor: '#e8e8f0' }}>
             <div className="flex-1 min-w-[120px]">
