@@ -6,18 +6,8 @@ import { UrgencyBadge } from './UrgencyBadge'
 import { AlertTriangle, Clock, X } from 'lucide-react'
 import Link from 'next/link'
 
-interface Transaction {
-  id: number
-  description: string
-  amount: number
-  type: 'income' | 'expense'
-  due_date: string | null
-  categories?: { name: string } | null
-  businesses?: { name: string } | null
-}
-
 interface DuePaymentsModalProps {
-  dueItems: Transaction[]
+  dueItems: any[]
   hasTC: boolean
   tcRate: number
   onDismiss?: () => void

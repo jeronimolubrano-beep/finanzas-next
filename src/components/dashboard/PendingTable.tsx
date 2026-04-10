@@ -5,18 +5,8 @@ import { MarkPaidButton } from '@/app/transactions/pending/MarkPaidButton'
 import { UrgencyBadge } from './UrgencyBadge'
 import { CheckCircle2 } from 'lucide-react'
 
-interface Transaction {
-  id: number
-  description: string
-  amount: number
-  type: 'income' | 'expense'
-  due_date: string | null
-  categories: { name: string } | null
-  businesses: { name: string } | null
-}
-
 interface PendingTableProps {
-  items: Transaction[]
+  items: any[]
   color: 'green' | 'red'
   sign: '+' | '-'
   tcRate: number

@@ -1,11 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { DashboardCharts } from './DashboardCharts'
 import { KPICard } from '@/components/KPICard'
 import { PendingTable } from '@/components/dashboard/PendingTable'
 import { formatMoney, daysUntilDue } from '@/lib/utils'
-import { TrendingUp, TrendingDown, AlertTriangle, Clock } from 'lucide-react'
+import { TrendingUp, TrendingDown, AlertTriangle, Clock, X } from 'lucide-react'
 
 interface MonthlyData {
   month: string
@@ -24,7 +25,7 @@ interface Business {
   name: string
 }
 
-interface Transaction {
+interface TransactionBase {
   id: number
   description: string
   amount: number
@@ -48,11 +49,13 @@ interface DashboardTabsProps {
   tcType: string
   tcDate: string
   hasTC: boolean
-  pendingTxs: Transaction[]
+  pendingTxs: TransactionBase[]
   businesses: Business[]
   period: string
   businessFilter?: string
 }
+
+type DueDateFilter = 'all' | 'overdue' | 'today' | 'tomorrow' | 'this-week' | 'next-week' | 'this-month'
 
 export function DashboardTabs({
   currentTab,
@@ -75,6 +78,7 @@ export function DashboardTabs({
 }: DashboardTabsProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [dueDateFilter, setDueDateFilter] = useState<DueDateFilter>('all')
 
   const handleTabChange = (tab: 'overview' | 'pending') => {
     const params = new URLSearchParams(searchParams)
@@ -82,11 +86,65 @@ export function DashboardTabs({
     router.push(`/dashboard?${params.toString()}`)
   }
 
-  // Split pending into income/expense
-  const cobrar = pendingTxs.filter(t => t.type === 'income')
-  const pagar = pendingTxs.filter(t => t.type === 'expense')
+  // Helper function to filter by due date
+  const filterByDueDate = (txs: any[], filter: DueDateFilter) => {
+    if (filter === 'all') return txs
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayStr = today.toISOString().slice(0, 10)
+
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10)
+
+    const weekStart = new Date(today)
+    const weekEnd = new Date(today)
+    weekEnd.setDate(weekEnd.getDate() + 6)
+    const weekEndStr = weekEnd.toISOString().slice(0, 10)
+
+    const nextWeekStart = new Date(weekEnd)
+    nextWeekStart.setDate(nextWeekStart.getDate() + 1)
+    const nextWeekEnd = new Date(nextWeekStart)
+    nextWeekEnd.setDate(nextWeekEnd.getDate() + 6)
+    const nextWeekEndStr = nextWeekEnd.toISOString().slice(0, 10)
+
+    const monthEnd = new Date(today)
+    monthEnd.setMonth(monthEnd.getMonth() + 1, 0)
+    const monthEndStr = monthEnd.toISOString().slice(0, 10)
+
+    return txs.filter(t => {
+      if (!t.due_date) return false
+
+      switch (filter) {
+        case 'overdue':
+          return t.due_date < todayStr
+        case 'today':
+          return t.due_date === todayStr
+        case 'tomorrow':
+          return t.due_date === tomorrowStr
+        case 'this-week':
+          return t.due_date >= todayStr && t.due_date <= weekEndStr
+        case 'next-week':
+          return t.due_date >= nextWeekStart.toISOString().slice(0, 10) && t.due_date <= nextWeekEndStr
+        case 'this-month':
+          return t.due_date >= todayStr && t.due_date <= monthEndStr
+        default:
+          return true
+      }
+    })
+  }
+
+  // Split pending into income/expense and apply filter
+  const filteredPending = filterByDueDate(pendingTxs, dueDateFilter)
+  const cobrar = filteredPending.filter(t => t.type === 'income')
+  const pagar = filteredPending.filter(t => t.type === 'expense')
   const totalCobrar = cobrar.reduce((s, t) => s + Number(t.amount), 0)
   const totalPagar = pagar.reduce((s, t) => s + Number(t.amount), 0)
+
+  // Also get counts for alerts (based on ALL pending, not filtered)
+  const filteredOverdueItems = filterByDueDate(overdueItems, dueDateFilter)
+  const filteredSoonItems = filterByDueDate(soonItems, dueDateFilter)
 
   // Alerts
   const today = new Date().toISOString().slice(0, 10)
@@ -253,10 +311,91 @@ export function DashboardTabs({
       {/* Pending Payments Tab */}
       {currentTab === 'pending' && (
         <div>
-          {/* Alerts */}
-          {(overdueItems.length > 0 || soonItems.length > 0) && (
+          {/* Date Filter Buttons */}
+          <div className="flex flex-wrap gap-2 mb-6">
+            <button
+              onClick={() => setDueDateFilter('all')}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+              style={{
+                background: dueDateFilter === 'all' ? '#6439ff' : 'var(--dash-card)',
+                color: dueDateFilter === 'all' ? 'white' : '#8b8ec0',
+                border: '1px solid ' + (dueDateFilter === 'all' ? '#6439ff' : '#e8e8f0'),
+              }}
+            >
+              Todos
+            </button>
+            <button
+              onClick={() => setDueDateFilter('overdue')}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+              style={{
+                background: dueDateFilter === 'overdue' ? '#fe4962' : 'var(--dash-card)',
+                color: dueDateFilter === 'overdue' ? 'white' : '#8b8ec0',
+                border: '1px solid ' + (dueDateFilter === 'overdue' ? '#fe4962' : '#e8e8f0'),
+              }}
+            >
+              Vencidos
+            </button>
+            <button
+              onClick={() => setDueDateFilter('today')}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+              style={{
+                background: dueDateFilter === 'today' ? '#2edbc1' : 'var(--dash-card)',
+                color: dueDateFilter === 'today' ? '#022c22' : '#8b8ec0',
+                border: '1px solid ' + (dueDateFilter === 'today' ? '#2edbc1' : '#e8e8f0'),
+              }}
+            >
+              Hoy
+            </button>
+            <button
+              onClick={() => setDueDateFilter('tomorrow')}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+              style={{
+                background: dueDateFilter === 'tomorrow' ? '#f59e0b' : 'var(--dash-card)',
+                color: dueDateFilter === 'tomorrow' ? '#78350f' : '#8b8ec0',
+                border: '1px solid ' + (dueDateFilter === 'tomorrow' ? '#f59e0b' : '#e8e8f0'),
+              }}
+            >
+              Mañana
+            </button>
+            <button
+              onClick={() => setDueDateFilter('this-week')}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+              style={{
+                background: dueDateFilter === 'this-week' ? '#8b6fff' : 'var(--dash-card)',
+                color: dueDateFilter === 'this-week' ? 'white' : '#8b8ec0',
+                border: '1px solid ' + (dueDateFilter === 'this-week' ? '#8b6fff' : '#e8e8f0'),
+              }}
+            >
+              Esta semana
+            </button>
+            <button
+              onClick={() => setDueDateFilter('next-week')}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+              style={{
+                background: dueDateFilter === 'next-week' ? '#06b6d4' : 'var(--dash-card)',
+                color: dueDateFilter === 'next-week' ? 'white' : '#8b8ec0',
+                border: '1px solid ' + (dueDateFilter === 'next-week' ? '#06b6d4' : '#e8e8f0'),
+              }}
+            >
+              Próxima semana
+            </button>
+            <button
+              onClick={() => setDueDateFilter('this-month')}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+              style={{
+                background: dueDateFilter === 'this-month' ? '#ec4899' : 'var(--dash-card)',
+                color: dueDateFilter === 'this-month' ? 'white' : '#8b8ec0',
+                border: '1px solid ' + (dueDateFilter === 'this-month' ? '#ec4899' : '#e8e8f0'),
+              }}
+            >
+              Este mes
+            </button>
+          </div>
+
+          {/* Alerts - based on filtered results */}
+          {(filteredOverdueItems.length > 0 || filteredSoonItems.length > 0) && (
             <div className="space-y-2 mb-6">
-              {overdueItems.length > 0 && (
+              {filteredOverdueItems.length > 0 && (
                 <div
                   className="flex items-center gap-2 rounded-lg px-4 py-3 border"
                   style={{
@@ -266,12 +405,12 @@ export function DashboardTabs({
                 >
                   <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: '#fe4962' }} />
                   <span className="text-sm font-medium" style={{ color: '#fe4962' }}>
-                    {overdueItems.length} pago{overdueItems.length > 1 ? 's' : ''} vencido
-                    {overdueItems.length > 1 ? 's' : ''}
+                    {filteredOverdueItems.length} pago{filteredOverdueItems.length > 1 ? 's' : ''} vencido
+                    {filteredOverdueItems.length > 1 ? 's' : ''}
                   </span>
                 </div>
               )}
-              {soonItems.length > 0 && (
+              {filteredSoonItems.length > 0 && (
                 <div
                   className="flex items-center gap-2 rounded-lg px-4 py-3 border"
                   style={{
@@ -281,7 +420,7 @@ export function DashboardTabs({
                 >
                   <Clock className="w-4 h-4 shrink-0 text-yellow-500" />
                   <span className="text-sm font-medium text-yellow-600">
-                    {soonItems.length} pago{soonItems.length > 1 ? 's' : ''} vence{soonItems.length > 1 ? 'n' : ''} esta
+                    {filteredSoonItems.length} pago{filteredSoonItems.length > 1 ? 's' : ''} vence{filteredSoonItems.length > 1 ? 'n' : ''} esta
                     semana
                   </span>
                 </div>
