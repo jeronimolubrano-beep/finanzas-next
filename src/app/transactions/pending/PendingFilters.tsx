@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import { Calendar, X } from 'lucide-react'
 
-type QuickFilter = 'all' | 'overdue' | 'today' | 'tomorrow' | 'this-week' | 'next-week' | 'this-month'
+type QuickFilter = 'all' | 'overdue' | 'today' | 'tomorrow' | 'this-week' | 'next-week' | 'this-month' | 'custom'
 
 const QUICK_FILTERS: { key: QuickFilter; label: string; color: string; activeColor: string }[] = [
   { key: 'all',        label: 'Todos',           color: '#8b8ec0', activeColor: '#6439ff' },
