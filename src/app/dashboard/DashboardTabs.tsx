@@ -174,55 +174,6 @@ export function DashboardTabs({
       {/* Overview Tab */}
       {currentTab === 'overview' && (
         <div>
-          {/* Alertas de pagos urgentes */}
-          {(overdueItems.length > 0 || soonItems.length > 0) && (
-            <div className="space-y-2 mb-6">
-              {overdueItems.length > 0 && (
-                <div
-                  className="flex items-center gap-3 rounded-lg px-4 py-3 transition border"
-                  style={{
-                    background: 'rgba(254,73,98,0.1)',
-                    borderColor: 'rgba(254,73,98,0.3)',
-                  }}
-                >
-                  <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: '#fe4962' }} />
-                  <span className="text-sm font-medium flex-1" style={{ color: '#fe4962' }}>
-                    Tenés {overdueItems.length} pago{overdueItems.length > 1 ? 's' : ''} vencido
-                    {overdueItems.length > 1 ? 's' : ''}
-                  </span>
-                  <button
-                    onClick={() => handleTabChange('pending')}
-                    className="text-xs hover:opacity-80 transition"
-                    style={{ color: '#fe4962' }}
-                  >
-                    Ver →
-                  </button>
-                </div>
-              )}
-              {soonItems.length > 0 && (
-                <div
-                  className="flex items-center gap-3 rounded-lg px-4 py-3 transition border"
-                  style={{
-                    background: 'rgba(245,158,11,0.1)',
-                    borderColor: 'rgba(245,158,11,0.3)',
-                  }}
-                >
-                  <Clock className="w-4 h-4 shrink-0 text-yellow-400" />
-                  <span className="text-sm font-medium flex-1 text-yellow-400">
-                    Tenés {soonItems.length} pago{soonItems.length > 1 ? 's' : ''} que vence
-                    {soonItems.length > 1 ? 'n' : ''} esta semana
-                  </span>
-                  <button
-                    onClick={() => handleTabChange('pending')}
-                    className="text-xs hover:opacity-80 transition text-yellow-400"
-                  >
-                    Ver →
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* KPI Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-5">
             <KPICard

@@ -9,6 +9,7 @@ export interface CategoryBreakdown {
   catType: 'income' | 'expense'
   income: number
   expense: number
+  ivaByRate?: Record<number, number>
 }
 
 interface Props {
@@ -35,6 +36,20 @@ export function TaxSection({ totalNet, categoryBreakdown, selectedYear }: Props)
   const taxableIncome = Math.max(totalNet, 0)
   const taxAmount = taxableIncome * (taxRate / 100)
   const netAfterTax = totalNet - taxAmount
+
+  // Calcular IVA por tasa
+  const ivaByRate: Record<number, number> = {}
+  let totalIVA = 0
+  for (const cat of categoryBreakdown) {
+    if (cat.ivaByRate) {
+      for (const [rate, amount] of Object.entries(cat.ivaByRate)) {
+        const rateNum = parseFloat(rate)
+        if (!ivaByRate[rateNum]) ivaByRate[rateNum] = 0
+        ivaByRate[rateNum] += amount
+        totalIVA += amount
+      }
+    }
+  }
 
   const fmt = (n: number) => `$${formatMoney0(Math.abs(n))}`
 
@@ -142,6 +157,54 @@ export function TaxSection({ totalNet, categoryBreakdown, selectedYear }: Props)
         </div>
       </div>
 
+      {/* ── IVA Summary ──────────────────────────────────── */}
+      {totalIVA > 0 && (
+        <div
+          className="mt-6 rounded-xl border overflow-hidden"
+          style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}
+        >
+          {/* Header */}
+          <div
+            className="flex items-center gap-2 px-5 py-3 border-b"
+            style={{ borderColor: '#e8e8f0', background: '#f9f9ff' }}
+          >
+            <Percent className="w-4 h-4" style={{ color: '#f59e0b' }} />
+            <h3 className="text-sm font-semibold" style={{ color: '#4a4a6a' }}>
+              Resumen de IVA — {selectedYear}
+            </h3>
+          </div>
+
+          <div className="divide-y" style={{ '--tw-divide-opacity': '1', borderColor: '#f0f0f8' } as React.CSSProperties}>
+            {/* IVA por tasa */}
+            {Object.entries(ivaByRate)
+              .sort((a, b) => parseFloat(b[0]) - parseFloat(a[0]))
+              .map(([rate, amount]) => (
+                <div key={rate} className="flex items-center justify-between px-5 py-3">
+                  <span className="text-sm font-medium" style={{ color: '#4a4a6a' }}>
+                    IVA {parseFloat(rate).toFixed(1)}%
+                  </span>
+                  <span className="font-bold tabular-nums text-[#f59e0b]">
+                    {fmt(amount)}
+                  </span>
+                </div>
+              ))}
+
+            {/* Total IVA */}
+            <div
+              className="flex items-center justify-between px-5 py-3.5"
+              style={{ background: '#fffbf0' }}
+            >
+              <span className="font-bold text-sm" style={{ color: '#4a4a6a' }}>
+                Total IVA
+              </span>
+              <span className="text-lg font-bold tabular-nums text-[#f59e0b]">
+                {fmt(totalIVA)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal detalle por categoría ───────────────────── */}
       {showModal && (
         <div
@@ -198,6 +261,12 @@ export function TaxSection({ totalNet, categoryBreakdown, selectedYear }: Props)
                       className="px-4 py-2.5 text-right text-xs font-semibold uppercase"
                       style={{ color: '#8b8ec0' }}
                     >
+                      IVA
+                    </th>
+                    <th
+                      className="px-4 py-2.5 text-right text-xs font-semibold uppercase"
+                      style={{ color: '#8b8ec0' }}
+                    >
                       Tasa
                     </th>
                     <th
@@ -216,6 +285,10 @@ export function TaxSection({ totalNet, categoryBreakdown, selectedYear }: Props)
                       const catNet = cat.income - cat.expense
                       const catTaxBase = Math.max(catNet, 0)
                       const catTax = catTaxBase * (taxRate / 100)
+                      const catIVA = cat.ivaByRate
+                        ? Object.values(cat.ivaByRate).reduce((sum, amt) => sum + amt, 0)
+                        : 0
+                      const ivaRates = cat.ivaByRate ? Object.keys(cat.ivaByRate).map(r => `${parseFloat(r).toFixed(1)}%`).join(', ') : '—'
                       return (
                         <tr
                           key={i}
@@ -246,6 +319,15 @@ export function TaxSection({ totalNet, categoryBreakdown, selectedYear }: Props)
                           >
                             {catNet >= 0 ? '+' : '-'}{fmt(catNet)}
                           </td>
+                          <td className="px-4 py-3 text-right tabular-nums font-medium text-[#f59e0b]">
+                            {catIVA > 0 ? fmt(catIVA) : '—'}
+                          </td>
+                          <td
+                            className="px-4 py-3 text-right tabular-nums text-sm"
+                            style={{ color: '#8b8ec0' }}
+                          >
+                            {ivaRates}
+                          </td>
                           <td
                             className="px-4 py-3 text-right tabular-nums text-sm"
                             style={{ color: '#8b8ec0' }}
@@ -270,6 +352,15 @@ export function TaxSection({ totalNet, categoryBreakdown, selectedYear }: Props)
                       }`}
                     >
                       {totalNet >= 0 ? '+' : '-'}{fmt(totalNet)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold tabular-nums text-[#f59e0b]">
+                      {totalIVA > 0 ? fmt(totalIVA) : '—'}
+                    </td>
+                    <td
+                      className="px-4 py-3 text-right font-bold"
+                      style={{ color: '#8b8ec0' }}
+                    >
+                      —
                     </td>
                     <td
                       className="px-4 py-3 text-right font-bold"

@@ -18,7 +18,7 @@ export default async function IncomeStatementPage({
 
   let query = supabase
     .from('transactions')
-    .select('date, type, amount, categories(name, type)')
+    .select('date, type, amount, iva_rate, categories(name, type)')
     .gte('date', `${selectedYear}-01-01`)
     .lte('date', `${selectedYear}-12-31`)
 
@@ -32,18 +32,32 @@ export default async function IncomeStatementPage({
     date: string
     type: string
     amount: number | string
+    iva_rate: number | null
     categories: { name: string; type: string } | null
   }
   const txs = (transactions ?? []) as unknown as TxRow[]
 
-  // Build category breakdown for tax modal
-  const catMap: Record<string, CategoryBreakdown> = {}
+  // Build category breakdown for tax modal with IVA tracking
+  const catMap: Record<string, CategoryBreakdown & { ivaByRate: Record<number, number> }> = {}
   for (const t of txs) {
     const name = t.categories?.name ?? 'Sin categoría'
     const catType = (t.categories?.type ?? 'expense') as 'income' | 'expense'
-    if (!catMap[name]) catMap[name] = { name, catType, income: 0, expense: 0 }
-    if (t.type === 'income') catMap[name].income += Number(t.amount)
-    else catMap[name].expense += Number(t.amount)
+    if (!catMap[name]) {
+      catMap[name] = { name, catType, income: 0, expense: 0, ivaByRate: {} }
+    }
+    if (t.type === 'income') {
+      catMap[name].income += Number(t.amount)
+    } else {
+      catMap[name].expense += Number(t.amount)
+      // Track IVA amounts by rate
+      if (t.iva_rate && t.iva_rate > 0) {
+        const ivaAmount = Number(t.amount) * (t.iva_rate / (100 + t.iva_rate))
+        if (!catMap[name].ivaByRate[t.iva_rate]) {
+          catMap[name].ivaByRate[t.iva_rate] = 0
+        }
+        catMap[name].ivaByRate[t.iva_rate] += ivaAmount
+      }
+    }
   }
   const categoryBreakdown = Object.values(catMap)
   const { data: businesses } = await supabase.from('businesses').select('*').order('name')
