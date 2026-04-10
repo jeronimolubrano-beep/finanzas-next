@@ -81,3 +81,14 @@ export function daysUntilDue(dueDate: string): number {
   const due = new Date(dueDate + 'T00:00:00')
   return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 }
+
+/**
+ * Filtra transacciones pendientes que vencen hoy o mañana.
+ * Útil para mostrar alertas modales al cargar el dashboard.
+ */
+export function getPaymentsDueToday(transactions: any[]): any[] {
+  const today = new Date().toISOString().slice(0, 10)
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+
+  return transactions.filter(t => t.due_date && (t.due_date === today || t.due_date === tomorrow))
+}

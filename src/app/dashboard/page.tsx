@@ -1,16 +1,19 @@
 import { createClient } from '@/lib/supabase/server'
 import { KPICard } from '@/components/KPICard'
 import { DashboardCharts } from './DashboardCharts'
-import { formatMoney, getCurrentYear, daysUntilDue } from '@/lib/utils'
+import { DashboardTabs } from './DashboardTabs'
+import { DuePaymentsModal } from '@/components/dashboard/DuePaymentsModal'
+import { formatMoney, getCurrentYear, daysUntilDue, getPaymentsDueToday } from '@/lib/utils'
 import Link from 'next/link'
 import { AlertTriangle, Clock, BarChart3 } from 'lucide-react'
 
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ business_id?: string; period?: string }>
+  searchParams: Promise<{ business_id?: string; period?: string; tab?: string }>
 }) {
   const params = await searchParams
+  const tab = params.tab || 'overview'
   const supabase = await createClient()
   const now = new Date()
   const currentYear = getCurrentYear()
@@ -114,6 +117,7 @@ export default async function DashboardPage({
   const soonItems = allPending.filter(t =>
     t.due_date && t.due_date >= today && daysUntilDue(t.due_date) <= 7
   )
+  const paymentsDueToday = getPaymentsDueToday(allPending)
 
   const totalCobrar = allPending.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
   const totalPagar = allPending.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
@@ -128,6 +132,15 @@ export default async function DashboardPage({
 
   return (
     <div style={{ background: 'var(--dash-bg)', width: '100vw', marginLeft: 'calc(50% - 50vw)', marginTop: '-24px', minHeight: '100vh', padding: '24px 16px' }}>
+      {/* Modal de pagos vencidos */}
+      {paymentsDueToday.length > 0 && (
+        <DuePaymentsModal
+          dueItems={paymentsDueToday}
+          tcRate={tcRate}
+          hasTC={hasTC}
+        />
+      )}
+
       {/* Header + filtros */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
@@ -162,72 +175,26 @@ export default async function DashboardPage({
         </form>
       </div>
 
-      {/* Alertas de pagos urgentes */}
-      {(overdueItems.length > 0 || soonItems.length > 0) && (
-        <div className="space-y-2 mb-6">
-          {overdueItems.length > 0 && (
-            <Link href="/transactions/pending"
-                  className="flex items-center gap-3 rounded-lg px-4 py-3 transition border"
-                  style={{ background: 'rgba(254,73,98,0.1)', borderColor: 'rgba(254,73,98,0.3)' }}>
-              <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: '#fe4962' }} />
-              <span className="text-sm font-medium flex-1" style={{ color: '#fe4962' }}>
-                Tenés {overdueItems.length} pago{overdueItems.length > 1 ? 's' : ''} vencido{overdueItems.length > 1 ? 's' : ''}
-              </span>
-              <span className="text-xs" style={{ color: '#fe4962' }}>Ver →</span>
-            </Link>
-          )}
-          {soonItems.length > 0 && (
-            <Link href="/transactions/pending"
-                  className="flex items-center gap-3 rounded-lg px-4 py-3 transition border"
-                  style={{ background: 'rgba(245,158,11,0.1)', borderColor: 'rgba(245,158,11,0.3)' }}>
-              <Clock className="w-4 h-4 shrink-0 text-yellow-400" />
-              <span className="text-sm font-medium flex-1 text-yellow-400">
-                Tenés {soonItems.length} pago{soonItems.length > 1 ? 's' : ''} que vence{soonItems.length > 1 ? 'n' : ''} esta semana
-              </span>
-              <span className="text-xs text-yellow-400">Ver →</span>
-            </Link>
-          )}
-        </div>
-      )}
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-5">
-        <KPICard dark title="Ingresos" value={`$${formatMoney(income)}`} color="green"
-                 usdValue={hasTC ? `$${toUSD(income)}` : undefined} />
-        <KPICard dark title="Gastos" value={`$${formatMoney(expense)}`} color="red"
-                 usdValue={hasTC ? `$${toUSD(expense)}` : undefined} />
-        <KPICard dark title="Flujo neto" value={`${net >= 0 ? '+' : ''}$${formatMoney(net)}`}
-                 color={net >= 0 ? 'green' : 'red'}
-                 usdValue={hasTC ? `${net >= 0 ? '+' : ''}$${toUSD(Math.abs(net))}` : undefined} />
-        <KPICard dark title="Total a cobrar" value={`$${formatMoney(totalCobrar)}`}
-                 subtitle={`${allPending.filter(t => t.type === 'income').length} pendiente(s)`}
-                 color="yellow"
-                 usdValue={hasTC ? `$${toUSD(totalCobrar)}` : undefined} />
-        <KPICard dark title="Total a pagar" value={`$${formatMoney(totalPagar)}`}
-                 subtitle={`${allPending.filter(t => t.type === 'expense').length} pendiente(s)`}
-                 color="orange"
-                 usdValue={hasTC ? `$${toUSD(totalPagar)}` : undefined} />
-      </div>
-
-      {/* TC + Tasa ahorro — fila secundaria compacta */}
-      <div className="flex flex-wrap items-center gap-4 mb-5 px-1">
-        {hasTC && (
-          <span className="text-xs" style={{ color: '#8b8ec0' }}>
-            TC {tcType}: <span className="font-semibold text-white">${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-            <span className="ml-1 opacity-60">({tcDate})</span>
-          </span>
-        )}
-        <span className="text-xs" style={{ color: '#8b8ec0' }}>
-          Tasa de ahorro: <span className="font-semibold" style={{ color: savingsRate >= 20 ? '#2edbc1' : savingsRate >= 0 ? '#f59e0b' : '#fe4962' }}>{savingsRate.toFixed(1)}%</span>
-        </span>
-        <span className="text-xs" style={{ color: '#8b8ec0' }}>
-          Mayor gasto: <span className="font-semibold text-white">{topExpenseCat}</span>
-          <span className="ml-1 opacity-60">(${formatMoney(topExpenseTotal)})</span>
-        </span>
-      </div>
-
-      {/* Gráficos */}
-      <DashboardCharts monthlyData={monthlyData} categoryData={categoryData} />
+      {/* Tabs Component */}
+      <DashboardTabs
+        currentTab={tab as 'overview' | 'pending'}
+        monthlyData={monthlyData}
+        categoryData={categoryData}
+        income={income}
+        expense={expense}
+        net={net}
+        savingsRate={savingsRate}
+        topExpenseCat={topExpenseCat}
+        topExpenseTotal={topExpenseTotal}
+        tcRate={tcRate}
+        tcType={tcType}
+        tcDate={tcDate}
+        hasTC={hasTC}
+        pendingTxs={allPending}
+        businesses={businesses || []}
+        period={period}
+        businessFilter={params.business_id}
+      />
     </div>
   )
 }

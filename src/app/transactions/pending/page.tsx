@@ -1,8 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatMoney, dueDateUrgency, daysUntilDue, formatDateShort } from '@/lib/utils'
-import { MarkPaidButton } from './MarkPaidButton'
+import { formatMoney, dueDateUrgency, daysUntilDue } from '@/lib/utils'
+import { UrgencyBadge } from '@/components/dashboard/UrgencyBadge'
+import { PendingTable } from '@/components/dashboard/PendingTable'
 import Link from 'next/link'
-import { Clock, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { TrendingUp, TrendingDown, AlertTriangle, Clock } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,83 +38,6 @@ export default async function PendingPage() {
   const overdueCount = txs.filter(t => t.due_date && t.due_date < today).length
   const soonCount = txs.filter(t => t.due_date && t.due_date >= today && daysUntilDue(t.due_date) <= 7).length
 
-  function UrgencyBadge({ dueDate }: { dueDate: string | null }) {
-    if (!dueDate) return <span className="text-xs" style={{ color: '#8b8ec0' }}>Sin vencimiento</span>
-    const urgency = dueDateUrgency(dueDate)
-    const days = daysUntilDue(dueDate)
-    const bg = urgency === 'overdue' ? 'rgba(254,73,98,0.1)'
-      : urgency === 'soon' ? 'rgba(245,158,11,0.1)'
-      : 'rgba(46,219,193,0.1)'
-    const color = urgency === 'overdue' ? '#fe4962'
-      : urgency === 'soon' ? '#f59e0b'
-      : '#2edbc1'
-    const label = days < 0
-      ? `Vencido hace ${Math.abs(days)}d`
-      : days === 0
-      ? 'Vence hoy'
-      : `Vence en ${days}d`
-    return (
-      <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: bg, color }}>
-        {formatDateShort(dueDate)} · {label}
-      </span>
-    )
-  }
-
-  function PendingTable({
-    items,
-    color,
-    sign,
-  }: {
-    items: typeof txs
-    color: 'green' | 'red'
-    sign: '+' | '-'
-  }) {
-    if (items.length === 0) {
-      return (
-        <div className="px-4 py-8 text-center text-sm" style={{ color: '#8b8ec0' }}>
-          <CheckCircle2 className="w-8 h-8 mx-auto mb-2" style={{ color: '#c8cce0' }} />
-          No hay pendientes en esta sección
-        </div>
-      )
-    }
-
-    return (
-      <div className="divide-y" style={{ borderColor: '#f0f0f8' }}>
-        {items.map(t => {
-          const urgency = dueDateUrgency(t.due_date)
-          const rowBg = urgency === 'overdue' ? 'rgba(254,73,98,0.03)' : ''
-          return (
-            <div key={t.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 hover:bg-[#f9f9ff] transition"
-                 style={{ background: rowBg }}>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate" style={{ color: 'var(--navy)' }}>{t.description}</p>
-                <p className="text-xs mt-0.5" style={{ color: '#8b8ec0' }}>
-                  {(t.categories as { name: string } | null)?.name ?? '—'} · {(t.businesses as { name: string } | null)?.name ?? '—'}
-                </p>
-                <div className="mt-1">
-                  <UrgencyBadge dueDate={t.due_date} />
-                </div>
-              </div>
-              <div className="flex items-center gap-3 sm:ml-auto">
-                <div className="text-right shrink-0">
-                  <p className={`font-bold text-sm ${color === 'green' ? 'text-[#2edbc1]' : 'text-[#fe4962]'}`}>
-                    {sign}${formatMoney(Number(t.amount))}
-                  </p>
-                  {hasTC && (
-                    <p className="text-xs" style={{ color: '#8b8ec0' }}>USD ${toUSD(Number(t.amount))}</p>
-                  )}
-                </div>
-                <div className="shrink-0">
-                  <MarkPaidButton id={t.id} type={t.type} />
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-
   return (
     <div>
       {/* Header */}
@@ -122,9 +46,9 @@ export default async function PendingPage() {
           <h1 className="text-2xl font-bold" style={{ color: 'var(--navy)' }}>Pagos Pendientes</h1>
           <p className="text-sm" style={{ color: '#8b8ec0' }}>{txs.length} pendiente(s) en total</p>
         </div>
-        <Link href="/transactions"
+        <Link href="/dashboard?tab=pending"
               className="text-sm hover:opacity-70 transition" style={{ color: '#6439ff' }}>
-          ← Ver todas las transacciones
+          ← Ver dashboard
         </Link>
       </div>
 
@@ -180,7 +104,7 @@ export default async function PendingPage() {
           <TrendingUp className="w-4 h-4 text-[#2edbc1]" />
           <h2 className="font-semibold text-[#2edbc1]">A cobrar ({cobrar.length})</h2>
         </div>
-        <PendingTable items={cobrar} color="green" sign="+" />
+        <PendingTable items={cobrar} color="green" sign="+" tcRate={tcRate} hasTC={hasTC} />
       </div>
 
       {/* Tabla A pagar */}
@@ -189,7 +113,7 @@ export default async function PendingPage() {
           <TrendingDown className="w-4 h-4 text-[#fe4962]" />
           <h2 className="font-semibold text-[#fe4962]">A pagar ({pagar.length})</h2>
         </div>
-        <PendingTable items={pagar} color="red" sign="-" />
+        <PendingTable items={pagar} color="red" sign="-" tcRate={tcRate} hasTC={hasTC} />
       </div>
     </div>
   )
