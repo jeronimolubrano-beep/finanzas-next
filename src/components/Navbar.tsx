@@ -22,6 +22,7 @@ function isLink(item: NavItem): item is NavLink {
 
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/transactions/pending', label: 'Pendientes', icon: Clock },
   { href: '/ai', label: 'Consultas IA', icon: Sparkles },
   {
     label: 'Transacciones',
@@ -30,7 +31,6 @@ const navItems: NavItem[] = [
       { href: '/transactions/add', label: 'Agregar manual', icon: PlusCircle },
       { href: '/transactions/ocr', label: 'Cargar desde imagen', icon: Camera },
       { href: '/transactions', label: 'Ver todas', icon: List },
-      { href: '/transactions/pending', label: 'Pagos pendientes', icon: Clock },
       { href: '/import', label: 'Importar datos', icon: FileUp },
     ],
   },
@@ -211,7 +211,7 @@ export function Navbar() {
                       {urgentItems.map(item => (
                         <Link
                           key={item.id}
-                          href="/transactions/pending"
+                          href="/transactions/pending?filter=overdue"
                           onClick={() => setBellOpen(false)}
                           className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition"
                         >
@@ -233,7 +233,7 @@ export function Navbar() {
                     </div>
                   )}
                   <div className="px-4 py-2.5 border-t" style={{ borderColor: '#333b72' }}>
-                    <Link href="/transactions/pending" onClick={() => setBellOpen(false)}
+                    <Link href="/transactions/pending?filter=all" onClick={() => setBellOpen(false)}
                           className="text-xs font-medium" style={{ color: '#6439ff' }}>
                       Ver todos los pendientes →
                     </Link>
