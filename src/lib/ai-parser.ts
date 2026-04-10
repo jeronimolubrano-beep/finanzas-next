@@ -25,6 +25,8 @@ export interface AIParseResult {
   detectedPeriod?: string
   detectedExchangeRate?: number
   notes?: string
+  discardedCount?: number      // NUEVO: cantidad de filas omitidas
+  discardReasons?: string[]    // NUEVO: razones (max 5 ejemplos)
 }
 
 /**
@@ -75,7 +77,16 @@ REGLAS DE EXTRACCIÓN:
 2. Si el monto menciona "USD", "U$S" o "DOLAR" → currency="USD", sino currency="ARS"
 3. type: "income" para ingresos/entradas, "expense" para gastos/egresos/salidas
 4. expenseType: "ordinario" para gastos recurrentes (sueldos, servicios, alquileres) | "extraordinario" para gastos no recurrentes, ventas de activos, inversiones
-5. Ignorá filas que sean TOTALES GENERALES o SALDO GENERAL ya que son sumas de otras filas
+4.1. 🔴 CRÍTICO - Omisión de filas sin monto:
+  - Si una fila tiene descripción pero NO tiene monto (vacío/borroso/ilegible):
+    → NO inventes monto
+    → NO incluyas en el JSON de respuesta
+    → Silenciosamente omitida
+  - Solo incluír transacciones con monto ≥ 0.01 claramente visible en el documento
+5. Ignorá filas que sean:
+  - TOTALES GENERALES, SALDO GENERAL, SUBTOTALES (sumas de otras filas)
+  - ENCABEZADOS o TÍTULOS DE SECCIÓN (sin monto real)
+  - Descripción SIN monto visible = OMITIR completamente, NO inventés montos
 6. Si no encontrás la empresa en el concepto, usá el businessId más apropiado según el contexto
 7. Para la categoría: usá el id y name de las listas de arriba. Si no hay match claro, dejá categoryId null y categoryName null
 8. exchangeRate: si el documento tiene "TIPO CAMBIO: X" usá ese valor. Sino usá ${exchangeRate}
@@ -104,7 +115,13 @@ Devolvé SOLAMENTE el JSON, sin texto previo ni posterior, sin markdown, sin blo
   "detectedPeriod": "YYYY-MM",
   "detectedExchangeRate": 1030,
   "notes": "Observaciones sobre el documento o problemas encontrados"
-}`
+}
+
+NOTA CRÍTICA: Si una fila tiene descripción pero no tiene monto (vacío, borroso, ilegible):
+- NO la incluyas en el array "transactions"
+- No devuelvas "amount": 0 ni "amount": null
+- Omitida silenciosamente del resultado
+- Podés mencionar en "notes" si hubo filas omitidas por falta de monto`
 
   const userPrompt = `Período de referencia: ${period}
 Tipo de cambio configurado: ${exchangeRate} ARS/USD
@@ -145,7 +162,18 @@ ${documentText}`
     throw new Error(`Error parseando JSON de Claude: ${e}`)
   }
 
-  const transactions: ParsedTransaction[] = (parsed.transactions ?? [])
+  // Helper para validar que el monto sea un número válido y > 0
+  const isValidTransactionAmount = (amount: number): boolean => {
+    return (
+      typeof amount === 'number' &&
+      !isNaN(amount) &&
+      amount > 0
+    )
+  }
+
+  // Mapear y filtrar transacciones
+  const allRawTransactions = parsed.transactions ?? []
+  const transactions: ParsedTransaction[] = allRawTransactions
     .map((t, index) => ({
       id: `ai-${index + 1}`,
       selected: true,
@@ -161,13 +189,46 @@ ${documentText}`
       currency: t.currency === 'USD' ? 'USD' : 'ARS',
       exchangeRate: t.exchangeRate ? Number(t.exchangeRate) : null,
     } as ParsedTransaction))
-    .filter(t => t.amount > 0)
+    .filter((t) => {
+      const amountNum = Number(t.amount) || 0
+      // Rechazar montos inválidos o <= 0
+      if (!isValidTransactionAmount(amountNum)) {
+        return false
+      }
+      // Rechazar descripción vacía
+      if (!t.description || !t.description.trim()) {
+        return false
+      }
+      return true
+    })
+
+  // Rastrear filas descartadas (FASE 3)
+  const validTransactionCount = transactions.length
+  const discardedCount = allRawTransactions.length - validTransactionCount
+
+  const discardReasons: string[] = []
+  if (discardedCount > 0) {
+    for (const raw of allRawTransactions) {
+      const amountNum = Number(raw.amount) || 0
+      const description = String(raw.description || '').trim()
+
+      // Validar si esta fila fue descartada
+      if (amountNum <= 0 || !raw.amount || !description) {
+        discardReasons.push(
+          `"${description.substring(0, 40) || '(sin descripción)'}" (sin monto válido)`
+        )
+      }
+      if (discardReasons.length >= 5) break // Max 5 ejemplos
+    }
+  }
 
   return {
     transactions,
     detectedPeriod: parsed.detectedPeriod,
     detectedExchangeRate: parsed.detectedExchangeRate ?? undefined,
     notes: parsed.notes,
+    discardedCount: discardedCount > 0 ? discardedCount : undefined,
+    discardReasons: discardReasons.length > 0 ? discardReasons : undefined,
   }
 }
 

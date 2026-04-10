@@ -110,6 +110,21 @@ export default function ImportPage() {
         }
 
         if (result.notes) setAiNotes(result.notes)
+
+        // FASE 5: Mostrar advertencia si hay filas omitidas
+        if (result.discardedCount && result.discardedCount > 0) {
+          const reasons = result.discardReasons?.join('\n• ') || ''
+          toast.error(
+            `⚠️ Se omitieron ${result.discardedCount} filas sin monto válido`,
+            { duration: 5000 }
+          )
+          if (reasons) {
+            setAiNotes(prev =>
+              (prev ? prev + '\n\n' : '') + '📋 Omitidas por falta de monto:\n• ' + reasons
+            )
+          }
+        }
+
         if (result.detectedPeriod && result.detectedPeriod !== period) {
           toast(`Período detectado: ${result.detectedPeriod}`, { icon: '📅' })
         }

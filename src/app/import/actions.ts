@@ -30,11 +30,58 @@ export async function saveImportedTransactions(transactions: ImportTransaction[]
     return { error: 'No hay transacciones para importar' }
   }
 
-  // Validar que todas tengan campos requeridos
+  // FASE 5: Validación reforzada de transacciones
+  const discardedInActions: string[] = []
+  const validTransactions: ImportTransaction[] = []
+
   for (const tx of transactions) {
-    if (!tx.date || !tx.description || !tx.amount || !tx.type || !tx.businessId) {
-      return { error: `Transacción inválida: ${tx.description || 'sin descripción'}` }
+    // Validar fecha
+    if (!tx.date || !String(tx.date).trim()) {
+      discardedInActions.push(`"${tx.description}" - fecha faltante`)
+      continue
     }
+
+    // Validar descripción
+    if (!tx.description || !String(tx.description).trim()) {
+      discardedInActions.push(`Sin descripción`)
+      continue
+    }
+
+    // Validar tipo
+    if (!tx.type || !['income', 'expense'].includes(tx.type)) {
+      discardedInActions.push(`"${tx.description}" - tipo inválido`)
+      continue
+    }
+
+    // Validar empresa
+    if (!tx.businessId || typeof tx.businessId !== 'number') {
+      discardedInActions.push(`"${tx.description}" - empresa no válida`)
+      continue
+    }
+
+    // CRÍTICO: Validar monto > 0
+    if (typeof tx.amount !== 'number' || tx.amount <= 0 || isNaN(tx.amount)) {
+      discardedInActions.push(`"${tx.description}" - monto inválido o cero`)
+      continue
+    }
+
+    validTransactions.push(tx)
+  }
+
+  // Si todas se descartan, error
+  if (validTransactions.length === 0) {
+    return {
+      error: 'Ninguna transacción es válida. Verificá montos, fechas y empresas.',
+      discarded: discardedInActions.slice(0, 5),
+    }
+  }
+
+  // Log de descartadas (para debugging)
+  if (discardedInActions.length > 0) {
+    console.warn(
+      `[saveImportedTransactions] Descartadas ${discardedInActions.length} transacciones:`,
+      discardedInActions.slice(0, 5)
+    )
   }
 
   // Preparar registros para insert
