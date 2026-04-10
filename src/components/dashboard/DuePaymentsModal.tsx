@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { formatMoney, dueDateUrgency } from '@/lib/utils'
+import { formatMoney } from '@/lib/utils'
 import { UrgencyBadge } from './UrgencyBadge'
 import { AlertTriangle, Clock, X } from 'lucide-react'
 import Link from 'next/link'
@@ -34,9 +34,12 @@ export function DuePaymentsModal({
     return formatMoney(ars / tcRate)
   }
 
-  const overdue = dueItems.filter(t => t.due_date && dueDateUrgency(t.due_date) === 'overdue')
-  const today = dueItems.filter(t => t.due_date && dueDateUrgency(t.due_date) === 'today')
-  const tomorrow = dueItems.filter(t => t.due_date && dueDateUrgency(t.due_date) === 'soon')
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const tomorrowStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+
+  const overdue = dueItems.filter(t => t.due_date && t.due_date < todayStr)
+  const todayItems = dueItems.filter(t => t.due_date === todayStr)
+  const tomorrowItems = dueItems.filter(t => t.due_date === tomorrowStr)
 
   return (
     <div
@@ -64,7 +67,7 @@ export function DuePaymentsModal({
               <p className="text-xs mt-0.5" style={{ color: '#8b8ec0' }}>
                 {overdue.length > 0
                   ? `${overdue.length} vencido${overdue.length > 1 ? 's' : ''}`
-                  : `${dueItems.length} vence${dueItems.length > 1 ? 'n' : ''} hoy/mañana`}
+                  : `${todayItems.length + tomorrowItems.length} vence${(todayItems.length + tomorrowItems.length) > 1 ? 'n' : ''} hoy/mañana`}
               </p>
             </div>
           </div>
@@ -106,16 +109,16 @@ export function DuePaymentsModal({
             </div>
           )}
 
-          {today.length > 0 && (
+          {todayItems.length > 0 && (
             <div>
               <p
                 className="text-xs font-semibold mb-2 uppercase"
                 style={{ color: '#2edbc1' }}
               >
-                Hoy ({today.length})
+                Hoy ({todayItems.length})
               </p>
               <div className="space-y-2">
-                {today.slice(0, 5).map(t => (
+                {todayItems.slice(0, 5).map(t => (
                   <div
                     key={t.id}
                     className="p-2 rounded text-xs"
@@ -134,16 +137,16 @@ export function DuePaymentsModal({
             </div>
           )}
 
-          {tomorrow.length > 0 && (
+          {tomorrowItems.length > 0 && (
             <div>
               <p
                 className="text-xs font-semibold mb-2 uppercase"
                 style={{ color: '#f59e0b' }}
               >
-                Mañana ({tomorrow.length})
+                Mañana ({tomorrowItems.length})
               </p>
               <div className="space-y-2">
-                {tomorrow.slice(0, 5).map(t => (
+                {tomorrowItems.slice(0, 5).map(t => (
                   <div
                     key={t.id}
                     className="p-2 rounded text-xs"
