@@ -164,6 +164,12 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
               className={inputClass}
               style={{ ...inputStyle, paddingLeft: '1.75rem' }}
             />
+            {/* Mostrar cantidad con separador de miles */}
+            {parsedAmount > 0 && (
+              <span className="absolute right-3 top-2 text-xs font-medium tabular-nums" style={{ color: '#8b8ec0', pointerEvents: 'none' }}>
+                {parsedAmount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            )}
           </div>
         </div>
         <div>
@@ -264,7 +270,7 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
 
       {/* ── Feature 2: TC dinámico por fecha ── */}
       <div
-        className="rounded-lg p-3 border"
+        className="rounded-lg p-3 border space-y-2"
         style={{ background: 'rgba(100,57,255,0.05)', borderColor: 'rgba(100,57,255,0.15)' }}
       >
         <div className="flex items-center justify-between">
@@ -280,7 +286,7 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
             )}
             {tcStatus === 'ok' && tcRate !== null && (
               <span className="font-bold" style={{ color: 'var(--navy)' }}>
-                ${tcRate.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                ${tcRate.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             )}
             {tcStatus === 'no-data' && (
@@ -298,6 +304,19 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
             <span className="text-xs" style={{ color: '#6439ff' }}>Se guardará con este TC</span>
           )}
         </div>
+
+        {/* Total en USD si se selecciona USD y hay TC */}
+        {currency === 'USD' && tcStatus === 'ok' && tcRate !== null && parsedAmount > 0 && (
+          <div className="text-sm pt-1 border-t" style={{ borderColor: 'rgba(100,57,255,0.2)' }}>
+            <span style={{ color: '#8b8ec0' }}>
+              Total en ARS:{' '}
+              <span className="font-semibold tabular-nums" style={{ color: '#06083f' }}>
+                ${(parsedAmount * tcRate).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </span>
+          </div>
+        )}
+
         <input type="hidden" name="exchange_rate" value={tcRate ?? ''} />
       </div>
 
