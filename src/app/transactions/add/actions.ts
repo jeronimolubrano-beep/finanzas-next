@@ -9,6 +9,14 @@ export async function addTransaction(formData: FormData) {
 
   const type_ = formData.get('type') as string
 
+  // IVA: solo aplica a expenses, valor entre 0 y 100
+  const ivaRawStr = formData.get('iva_rate') as string
+  const ivaRaw = ivaRawStr ? parseFloat(ivaRawStr) : null
+  const iva_rate =
+    type_ === 'expense' && ivaRaw !== null && !isNaN(ivaRaw) && ivaRaw >= 0
+      ? ivaRaw
+      : null
+
   const { error } = await supabase.from('transactions').insert({
     date: formData.get('date') as string,
     description: (formData.get('description') as string).trim(),
@@ -23,6 +31,7 @@ export async function addTransaction(formData: FormData) {
     currency: (formData.get('currency') as string) || 'ARS',
     exchange_rate: formData.get('exchange_rate') ? parseFloat(formData.get('exchange_rate') as string) : null,
     due_date: (formData.get('due_date') as string) || null,
+    iva_rate,
   })
 
   if (error) {

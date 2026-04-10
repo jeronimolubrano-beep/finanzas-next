@@ -40,6 +40,7 @@ const navItems: NavItem[] = [
     children: [
       { href: '/reports/cash-flow', label: 'Flujo de Caja', icon: DollarSign },
       { href: '/reports/income-statement', label: 'Estado de Resultados', icon: FileText },
+      { href: '/reports/balance-sheet', label: 'Estado de Situación Patrimonial', icon: FileText },
     ],
   },
   {
