@@ -135,6 +135,13 @@ export function DashboardTabs({
     })
   }
 
+  // Calculate alerts first (based on ALL pending)
+  const today = new Date().toISOString().slice(0, 10)
+  const overdueItems = pendingTxs.filter(t => t.due_date && t.due_date < today)
+  const soonItems = pendingTxs.filter(
+    t => t.due_date && t.due_date >= today && daysUntilDue(t.due_date) <= 7
+  )
+
   // Split pending into income/expense and apply filter
   const filteredPending = filterByDueDate(pendingTxs, dueDateFilter)
   const cobrar = filteredPending.filter(t => t.type === 'income')
@@ -142,16 +149,9 @@ export function DashboardTabs({
   const totalCobrar = cobrar.reduce((s, t) => s + Number(t.amount), 0)
   const totalPagar = pagar.reduce((s, t) => s + Number(t.amount), 0)
 
-  // Also get counts for alerts (based on ALL pending, not filtered)
+  // Also get counts for alerts (apply filter to alert items)
   const filteredOverdueItems = filterByDueDate(overdueItems, dueDateFilter)
   const filteredSoonItems = filterByDueDate(soonItems, dueDateFilter)
-
-  // Alerts
-  const today = new Date().toISOString().slice(0, 10)
-  const overdueItems = pendingTxs.filter(t => t.due_date && t.due_date < today)
-  const soonItems = pendingTxs.filter(
-    t => t.due_date && t.due_date >= today && daysUntilDue(t.due_date) <= 7
-  )
 
   return (
     <div>
