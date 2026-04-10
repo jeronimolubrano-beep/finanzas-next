@@ -25,16 +25,6 @@ interface Business {
   name: string
 }
 
-interface TransactionBase {
-  id: number
-  description: string
-  amount: number
-  type: 'income' | 'expense'
-  due_date: string | null
-  categories?: { name: string } | null
-  businesses?: { name: string } | null
-}
-
 interface DashboardTabsProps {
   currentTab: 'overview' | 'pending'
   monthlyData: MonthlyData[]
@@ -49,7 +39,7 @@ interface DashboardTabsProps {
   tcType: string
   tcDate: string
   hasTC: boolean
-  pendingTxs: TransactionBase[]
+  pendingTxs: any[]
   businesses: Business[]
   period: string
   businessFilter?: string

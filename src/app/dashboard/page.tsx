@@ -111,7 +111,8 @@ export default async function DashboardPage({
     .select('id, type, amount, due_date, currency, exchange_rate, description, categories(name), businesses(name)')
     .eq('status', 'devengado')
 
-  const allPending = pendingTxs ?? []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allPending: any[] = pendingTxs ?? []
   const today = new Date().toISOString().slice(0, 10)
   const overdueItems = allPending.filter(t => t.due_date && t.due_date < today)
   const soonItems = allPending.filter(t =>
