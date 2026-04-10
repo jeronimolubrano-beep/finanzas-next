@@ -105,10 +105,10 @@ export default async function DashboardPage({
     return (ars / tcRate).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   }
 
-  // Pagos pendientes para alertas
+  // Pagos pendientes para alertas y tabla
   const { data: pendingTxs } = await supabase
     .from('transactions')
-    .select('id, type, amount, due_date, currency, exchange_rate')
+    .select('id, type, amount, due_date, currency, exchange_rate, description, categories(name), businesses(name)')
     .eq('status', 'devengado')
 
   const allPending = pendingTxs ?? []
