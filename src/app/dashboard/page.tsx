@@ -13,7 +13,6 @@ export default async function DashboardPage({
   searchParams: Promise<{ business_id?: string; period?: string; tab?: string }>
 }) {
   const params = await searchParams
-  const tab = params.tab || 'overview'
   const supabase = await createClient()
   const now = new Date()
   const currentYear = getCurrentYear()
@@ -176,9 +175,8 @@ export default async function DashboardPage({
         </form>
       </div>
 
-      {/* Tabs Component */}
+      {/* Dashboard Component */}
       <DashboardTabs
-        currentTab={tab as 'overview' | 'pending'}
         monthlyData={monthlyData}
         categoryData={categoryData}
         income={income}
@@ -191,10 +189,7 @@ export default async function DashboardPage({
         tcType={tcType}
         tcDate={tcDate}
         hasTC={hasTC}
-        pendingTxs={allPending}
-        businesses={businesses || []}
         period={period}
-        businessFilter={params.business_id}
       />
     </div>
   )
