@@ -31,7 +31,7 @@ export default async function TransactionsPage({
 
   let query = supabase
     .from('transactions')
-    .select('*, categories(name), accounts(name), businesses(name)')
+    .select('*, iva_rate, categories(name), accounts(name), businesses(name)')
     .order(sortField, { ascending })
     .limit(200)
 
@@ -81,7 +81,8 @@ export default async function TransactionsPage({
   function toUSD(t: { amount: number | string; currency?: string; exchange_rate?: number | null }): number {
     const amt = Number(t.amount)
     if ((t.currency || 'ARS') === 'ARS') {
-      return tcRate > 0 ? amt / tcRate : 0
+      const rate = t.exchange_rate || tcRate
+      return rate > 0 ? amt / rate : 0
     }
     return amt
   }
@@ -202,6 +203,8 @@ export default async function TransactionsPage({
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Tipo</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Estado</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>IVA</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>TC</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Vencimiento</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{ color: '#8b8ec0' }}>Acciones</th>
               </tr>
@@ -238,6 +241,12 @@ export default async function TransactionsPage({
                     }`} style={{ background: t.status === 'devengado' ? 'rgba(245,158,11,0.1)' : 'rgba(46,219,193,0.1)' }}>
                       {statusLabel(t.status, t.type)}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-center text-xs" style={{ color: '#8b8ec0' }}>
+                    {t.iva_rate ? `${t.iva_rate}%` : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-center text-xs" style={{ color: '#8b8ec0' }}>
+                    {t.exchange_rate ? t.exchange_rate.toFixed(2) : '—'}
                   </td>
                   <td className="px-4 py-3 text-center">
                     {t.status === 'devengado' && t.due_date ? (() => {
@@ -278,7 +287,7 @@ export default async function TransactionsPage({
               ))}
               {(!transactions || transactions.length === 0) && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center" style={{ color: '#8b8ec0' }}>
+                  <td colSpan={11} className="px-4 py-12 text-center" style={{ color: '#8b8ec0' }}>
                     No hay transacciones registradas
                   </td>
                 </tr>

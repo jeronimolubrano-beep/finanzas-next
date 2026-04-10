@@ -49,9 +49,9 @@ export default async function IncomeStatementPage({
       catMap[name].income += Number(t.amount)
     } else {
       catMap[name].expense += Number(t.amount)
-      // Track IVA amounts by rate
+      // Track IVA amounts by rate (porcentaje simple del monto)
       if (t.iva_rate && t.iva_rate > 0) {
-        const ivaAmount = Number(t.amount) * (t.iva_rate / (100 + t.iva_rate))
+        const ivaAmount = Number(t.amount) * (t.iva_rate / 100)
         if (!catMap[name].ivaByRate[t.iva_rate]) {
           catMap[name].ivaByRate[t.iva_rate] = 0
         }

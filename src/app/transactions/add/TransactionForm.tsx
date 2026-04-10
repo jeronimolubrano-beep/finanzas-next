@@ -38,12 +38,12 @@ export function TransactionForm({ categories, accounts, businesses, today }: Pro
   const [ivaRate, setIvaRate] = useState<number>(0)
   const [amount, setAmount] = useState<string>('') // controlado para back-calcular IVA
 
-  // Back-cálculo: extrae el IVA del monto final
-  // Fórmula: IVA = total × tasa / (100 + tasa)
+  // Cálculo de IVA deducible: aplica el porcentaje al monto total
+  // Fórmula: IVA = monto × tasa / 100
   const parsedAmount = parseFloat(amount) || 0
   const ivaAmount =
     ivaRate > 0 && parsedAmount > 0
-      ? parsedAmount * ivaRate / (100 + ivaRate)
+      ? parsedAmount * ivaRate / 100
       : null
   const baseImponible =
     ivaAmount !== null ? parsedAmount - ivaAmount : null
