@@ -671,6 +671,8 @@ export default function ImportPage() {
                   <th className="px-3 py-2.5 text-left text-xs font-semibold" style={{ color: '#4a4a6a' }}>Categoría</th>
                   <th className="px-3 py-2.5 text-right text-xs font-semibold" style={{ color: '#4a4a6a' }}>Monto</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold" style={{ color: '#4a4a6a' }}>$</th>
+                  <th className="px-3 py-2.5 text-center text-xs font-semibold" style={{ color: '#4a4a6a' }}>IVA</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold" style={{ color: '#4a4a6a' }}>Cuenta</th>
                   <th className="px-3 py-2.5 w-16"></th>
                 </tr>
               </thead>
@@ -716,13 +718,17 @@ export default function ImportPage() {
                       <td className="px-3 py-2">
                         <span className="text-xs px-2 py-0.5 rounded-full font-medium"
                               style={{
-                                background: tx.businessName === 'EML' ? 'rgba(100,57,255,0.1)' :
-                                           tx.businessName === 'SADIA' ? 'rgba(46,219,193,0.1)' :
-                                           tx.businessName === 'ÑANCUL' ? 'rgba(245,158,11,0.1)' :
+                                background: tx.businessName === 'EML'       ? 'rgba(100,57,255,0.1)'  :
+                                           tx.businessName === 'Sadia'      ? 'rgba(46,219,193,0.1)'  :
+                                           tx.businessName === 'Ñancul'     ? 'rgba(245,158,11,0.1)'  :
+                                           tx.businessName === 'Promenade'  ? 'rgba(254,73,98,0.1)'   :
+                                           tx.businessName === 'PDA'        ? 'rgba(59,130,246,0.1)'  :
                                            'rgba(139,142,192,0.1)',
-                                color: tx.businessName === 'EML' ? '#6439ff' :
-                                       tx.businessName === 'SADIA' ? '#1aab96' :
-                                       tx.businessName === 'ÑANCUL' ? '#d97706' :
+                                color: tx.businessName === 'EML'       ? '#6439ff' :
+                                       tx.businessName === 'Sadia'      ? '#1aab96' :
+                                       tx.businessName === 'Ñancul'     ? '#d97706' :
+                                       tx.businessName === 'Promenade'  ? '#fe4962' :
+                                       tx.businessName === 'PDA'        ? '#2563eb' :
                                        '#5b5c8c',
                               }}>
                           {tx.businessName}
@@ -761,6 +767,24 @@ export default function ImportPage() {
                         <span className="text-[10px] font-medium" style={{ color: tx.currency === 'USD' ? '#6439ff' : '#8b8ec0' }}>
                           {tx.currency}
                         </span>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {tx.type === 'expense' && tx.ivaRate != null && tx.ivaRate > 0 ? (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: 'rgba(245,158,11,0.1)', color: '#d97706' }}>
+                            {tx.ivaRate}%
+                          </span>
+                        ) : (
+                          <span className="text-[10px]" style={{ color: '#d1d5db' }}>—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {tx.accountId != null ? (
+                          <span className="text-[10px]" style={{ color: '#4a4a6a' }}>
+                            {ACCOUNTS.find(a => a.id === tx.accountId)?.name ?? `#${tx.accountId}`}
+                          </span>
+                        ) : (
+                          <span className="text-[10px]" style={{ color: '#d1d5db' }}>—</span>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-1">
@@ -836,11 +860,17 @@ export default function ImportPage() {
 // ─── Modal de edición ────────────────────────────────────────────────────────
 
 const BUSINESSES = [
-  { id: 1, name: 'SADIA'  },
-  { id: 1, name: 'GUEMES' },
-  { id: 1, name: 'PDA'    },
-  { id: 2, name: 'ÑANCUL' },
-  { id: 4, name: 'EML'    },
+  { id: 1, name: 'Sadia'     },
+  { id: 2, name: 'Ñancul'    },
+  { id: 3, name: 'Promenade' },
+  { id: 4, name: 'EML'       },
+  { id: 5, name: 'PDA'       },
+]
+
+const ACCOUNTS = [
+  { id: 1, name: 'Cuenta corriente' },
+  { id: 2, name: 'Caja de ahorro'   },
+  { id: 3, name: 'Efectivo'         },
 ]
 
 function EditModal({
@@ -1028,6 +1058,50 @@ function EditModal({
               <option value="">Sin categoría</option>
               {applicableCategories.map(c => (
                 <option key={c.id} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Tasa IVA (solo si gasto) */}
+          {draft.type === 'expense' && (
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: '#4a4a6a' }}>Tasa IVA</label>
+              <div className="flex gap-2">
+                {([null, 21, 10.5] as (number | null)[]).map(rate => (
+                  <button
+                    key={String(rate)}
+                    type="button"
+                    onClick={() => set('ivaRate', rate)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all"
+                    style={{
+                      borderColor: draft.ivaRate === rate ? '#6439ff' : 'transparent',
+                      background: draft.ivaRate === rate ? 'rgba(100,57,255,0.1)' : '#f0f0f8',
+                      color: draft.ivaRate === rate ? '#6439ff' : '#4a4a6a',
+                    }}
+                  >
+                    {rate === null ? 'Sin IVA' : `${rate}%`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Cuenta */}
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: '#4a4a6a' }}>Cuenta (opcional)</label>
+            <select
+              value={draft.accountId ?? ''}
+              onChange={e => {
+                const id = e.target.value ? Number(e.target.value) : null
+                const acc = ACCOUNTS.find(a => a.id === id)
+                setDraft(prev => ({ ...prev, accountId: id, accountName: acc?.name ?? null }))
+              }}
+              className="w-full rounded-lg px-3 py-2 text-sm border"
+              style={{ borderColor: '#e0e0ef', color: '#1a1a2e' }}
+            >
+              <option value="">Sin especificar</option>
+              {ACCOUNTS.map(a => (
+                <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
           </div>

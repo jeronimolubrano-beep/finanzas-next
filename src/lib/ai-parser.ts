@@ -72,6 +72,11 @@ ${incomeCategories}
 CATEGORÍAS DE GASTOS DISPONIBLES:
 ${expenseCategories}
 
+CUENTAS DISPONIBLES:
+• Cuenta corriente (id: 1)
+• Caja de ahorro (id: 2)
+• Efectivo (id: 3)
+
 REGLAS DE EXTRACCIÓN:
 1. Números argentinos: punto = miles, coma = decimal. Ej: "1.445.170" → 1445170 | "1.234,56" → 1234.56
 2. Si el monto menciona "USD", "U$S" o "DOLAR" → currency="USD", sino currency="ARS"
@@ -92,6 +97,16 @@ REGLAS DE EXTRACCIÓN:
 8. exchangeRate: si el documento tiene "TIPO CAMBIO: X" usá ese valor. Sino usá ${exchangeRate}
 9. ${modeInstructions}
 10. Todas las fechas en formato YYYY-MM-DD. Si solo conocés el mes, usá el último día del mes
+11. ivaRate: detectar tasa de IVA aplicable al gasto. Solo para gastos (expenses):
+    - Si la descripción menciona "IVA 21%", "21%", o es un servicio típico → ivaRate: 21
+    - Si menciona "IVA 10.5%", "10,5%" → ivaRate: 10.5
+    - Si es sueldo, retiro, transferencia interna o sin IVA → ivaRate: null
+    - Para ingresos: siempre ivaRate: null
+12. accountId: detectar la cuenta desde el medio de pago:
+    - "EFVO", "Efectivo", "Caja", "Cash" → accountId: 3 (Efectivo)
+    - "CC", "Cuenta corriente", "Transferencia", "Banco", "Débito", "Tarjeta" → accountId: 1 (Cuenta corriente)
+    - "CA", "Caja de ahorro" → accountId: 2 (Caja de ahorro)
+    - Sin información de medio de pago → accountId: null
 
 FORMATO DE RESPUESTA:
 Devolvé SOLAMENTE el JSON, sin texto previo ni posterior, sin markdown, sin bloques de código:
@@ -104,12 +119,15 @@ Devolvé SOLAMENTE el JSON, sin texto previo ni posterior, sin markdown, sin blo
       "type": "income" | "expense",
       "amount": 1234567.89,
       "businessId": 1,
-      "businessName": "SADIA",
+      "businessName": "Sadia",
       "categoryId": 5,
       "categoryName": "Sueldos y Cargas Sociales",
       "expenseType": "ordinario",
       "currency": "ARS",
-      "exchangeRate": 1030
+      "exchangeRate": 1030,
+      "ivaRate": 21,
+      "accountId": 1,
+      "accountName": "Cuenta corriente"
     }
   ],
   "detectedPeriod": "YYYY-MM",
@@ -188,6 +206,9 @@ ${documentText}`
       expenseType: t.expenseType === 'extraordinario' ? 'extraordinario' : 'ordinario',
       currency: t.currency === 'USD' ? 'USD' : 'ARS',
       exchangeRate: t.exchangeRate ? Number(t.exchangeRate) : null,
+      ivaRate: t.type !== 'income' && t.ivaRate != null ? Number(t.ivaRate) || null : null,
+      accountId: t.accountId != null ? Number(t.accountId) || null : null,
+      accountName: t.accountName ? String(t.accountName) : null,
     } as ParsedTransaction))
     .filter((t) => {
       const amountNum = Number(t.amount) || 0
@@ -247,6 +268,9 @@ interface RawTransaction {
   expenseType?: string
   currency?: string
   exchangeRate?: number | string | null
+  ivaRate?: number | string | null
+  accountId?: number | string | null
+  accountName?: string | null
 }
 
 function sanitizeDate(date: string | undefined, period: string): string {
