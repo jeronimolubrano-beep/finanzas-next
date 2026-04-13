@@ -21,6 +21,8 @@ interface ImportTransaction {
   expenseType: 'ordinario' | 'extraordinario'
   currency: 'ARS' | 'USD'
   exchangeRate: number | null
+  accountId?: number | null
+  ivaRate?: number | null
 }
 
 export async function saveImportedTransactions(transactions: ImportTransaction[]) {
@@ -85,7 +87,7 @@ export async function saveImportedTransactions(transactions: ImportTransaction[]
   }
 
   // Preparar registros para insert
-  const records = transactions.map(tx => ({
+  const records = validTransactions.map(tx => ({
     date: tx.date,
     description: tx.description,
     notes: tx.notes || null,
@@ -97,7 +99,8 @@ export async function saveImportedTransactions(transactions: ImportTransaction[]
     currency: tx.currency,
     exchange_rate: tx.exchangeRate,
     status: 'percibido' as const,
-    account_id: null,
+    account_id: tx.accountId || null,
+    iva_rate: tx.ivaRate || null,
     due_date: null,
     paid_date: null,
   }))

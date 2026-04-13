@@ -269,6 +269,8 @@ export default function ImportPage() {
         expenseType: t.expenseType as 'ordinario' | 'extraordinario',
         currency: t.currency,
         exchangeRate: t.exchangeRate,
+        accountId: t.accountId ?? null,
+        ivaRate: t.ivaRate ?? null,
       }))
 
       const result = await saveImportedTransactions(toSave)

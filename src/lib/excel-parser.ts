@@ -18,6 +18,10 @@ export interface ParsedTransaction {
   expenseType: 'ordinario' | 'extraordinario'
   currency: 'ARS' | 'USD'
   exchangeRate: number | null
+  // Campos opcionales del nuevo parser
+  accountId?: number | null
+  accountName?: string | null
+  ivaRate?: number | null
 }
 
 // Mapeo de columnas por entidad (0-indexed)

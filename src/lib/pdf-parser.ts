@@ -1,54 +1,74 @@
 /**
- * Parser de PDFs "Informe Ingresos/Egresos"
+ * Parser de PDFs "Informe Ingresos/Egresos" — Grupo Lubrano
  *
- * Dos modos:
- *  - 'summary': una transacción por subtotal de categoría × empresa (pocos registros)
- *  - 'detail' : una transacción por línea individual del informe (todos los detalles)
+ * Diseñado para el formato fijo del informe mensual.
+ * Importa: gastos ordinarios (detalle línea × empresa), ingresos (facturas/dptos),
+ * gastos extraordinarios (con fecha real), y retiros ML.
+ *
+ * Especificación:
+ * - Empresas: SADIA(1), GUEMES→Promenade(3), PDA(5), ÑANCUL(2), EML(4)
+ * - Categorías: Proveedores(14), Sueldos(15), Servicios(8), Planes(17),
+ *   Impuestos(18), Seguros(19), Otros(20), Alquileres(24), Otros ingresos(31)
+ * - Fecha ordinarios: último día del mes
+ * - Status: todo percibido
+ * - TC: no se guarda (se calcula con API)
+ * - IVA: detectar de líneas que mencionan IVA
+ * - Montos $0: ignorar
+ * - Medio pago: EFVO → Efectivo(3), resto → Cuenta corriente(1)
  */
 
 import type { ParsedTransaction } from './excel-parser'
 
+// ─── MAPEOS FIJOS ──────────────────────────────────────────────────────────────
+
 const COMPANIES = [
-  { id: 1, name: 'SADIA'  },
-  { id: 1, name: 'GUEMES' },
-  { id: 1, name: 'PDA'    },
-  { id: 2, name: 'ÑANCUL' },
-  { id: 4, name: 'EML'    },
+  { id: 1, key: 'SADIA',  dbName: 'Sadia' },
+  { id: 3, key: 'GUEMES', dbName: 'Promenade' },
+  { id: 5, key: 'PDA',    dbName: 'PDA' },
+  { id: 2, key: 'ÑANCUL', dbName: 'Ñancul' },
+  { id: 4, key: 'EML',    dbName: 'EML' },
 ] as const
 
-const EXPENSE_SECTIONS: Array<{ header: string; keyword: string; category: string }> = [
-  { header: 'PROVEEDORES',        keyword: 'PROVEEDORES',  category: 'Proveedores' },
-  { header: 'SUELDOS',            keyword: 'SUELDOS',      category: 'Sueldos y Cargas Sociales' },
-  { header: 'SERVICIOS',          keyword: 'SERVICIOS',    category: 'Servicios' },
-  { header: 'PLANES FINANCIACION',keyword: 'PLANES',       category: 'Planes Financiación' },
-  { header: 'IMPUESTOS',          keyword: 'IMPUESTOS',    category: 'Impuestos' },
-  { header: 'SEGUROS',            keyword: 'SEGUROS',      category: 'Seguros' },
-  { header: 'VARIOS',             keyword: 'VARIOS',       category: 'Varios' },
-]
+type CompanyKey = typeof COMPANIES[number]['key']
 
-const INCOME_CATEGORY: Record<string, string> = {
-  'SADIA':  'Alquiler Ministerio',
-  'GUEMES': 'Alquileres Güemes Deptos',
-  'PDA':    'Recupero Gastos PDA',
-  'ÑANCUL': 'Liquidación Venta Ñancul',
-  'EML':    'Otros ingresos',
+const CATEGORY_MAP: Record<string, { id: number; name: string }> = {
+  'PROVEEDORES':         { id: 14, name: 'Proveedores' },
+  'SUELDOS':             { id: 15, name: 'Sueldos y Cargas Sociales' },
+  'SERVICIOS':           { id: 8,  name: 'Servicios' },
+  'PLANES FINANCIACION': { id: 17, name: 'Planes Financiación' },
+  'IMPUESTOS':           { id: 18, name: 'Impuestos' },
+  'SEGUROS':             { id: 19, name: 'Seguros' },
+  'VARIOS':              { id: 20, name: 'Otros' },
+  'EXTRAORDINARIOS':     { id: 20, name: 'Otros' },
+  'ML_RETIROS':          { id: 20, name: 'Otros' },
+  'ALQUILERES':          { id: 24, name: 'Alquileres' },
+  'OTROS_INGRESOS':      { id: 31, name: 'Otros ingresos' },
 }
 
-// Conceptos que identifican líneas de ingreso ordinario
-const INCOME_PREFIXES = [
-  'INGRESOS ALQUILERES', 'INGRESOS PDA', 'INGRESOS ÑANCUL', 'INGRESOS NANCUL',
-  'ALQUILERES GUEMES', 'ALQUILER GUEMES', 'ALQUILER MINISTERIO',
-  'ALQUILER ALEM', 'ALQUILER ANTENA', 'LIQ VENTA', 'LIQUIDACION VENTA',
-  'RENTABILIDAD FCI', 'INTERESES BONOS', 'OTROS INGRESOS', 'ALQUILERES MINISTERIO',
-]
+const ACCOUNT_MAP: Record<string, { id: number; name: string }> = {
+  'EFVO':     { id: 3, name: 'Efectivo' },
+  'DEFAULT':  { id: 1, name: 'Cuenta corriente' },
+}
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+/** Secciones de gasto ordinario en el orden que aparecen en el informe */
+const EXPENSE_SECTIONS = [
+  { header: 'PROVEEDORES',         subtotalKey: 'PROVEEDORES',  catKey: 'PROVEEDORES' },
+  { header: 'SUELDOS',             subtotalKey: 'SUELDOS',      catKey: 'SUELDOS' },
+  { header: 'SERVICIOS',           subtotalKey: 'SERVICIOS',    catKey: 'SERVICIOS' },
+  { header: 'PLANES FINANCIACION', subtotalKey: 'PLANES',       catKey: 'PLANES FINANCIACION' },
+  { header: 'IMPUESTOS',           subtotalKey: 'IMPUESTOS',    catKey: 'IMPUESTOS' },
+  { header: 'SEGUROS',             subtotalKey: 'SEGUROS',      catKey: 'SEGUROS' },
+  { header: 'VARIOS',              subtotalKey: 'VARIOS',       catKey: 'VARIOS' },
+] as const
+
+// ─── HELPERS ────────────────────────────────────────────────────────────────────
 
 function parseArgNumber(str: string): number {
   if (!str) return 0
   let s = str.trim().replace(/[$\s]/g, '')
   const neg = s.startsWith('-')
   if (neg) s = s.slice(1)
+  // Formato argentino: 1.445.170 o 1.445.170,50
   s = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/\./g, '')
   const n = parseFloat(s)
   if (isNaN(n)) return 0
@@ -56,26 +76,26 @@ function parseArgNumber(str: string): number {
 }
 
 /**
- * Extrae números en formato argentino estricto: \d{1,3}(?:\.\d{3})*
- * Esto separa correctamente números pegados que genera pdf-parse en tablas:
- * "1.445.1701.445.170" → ["1.445.170","1.445.170"] en vez de un número gigante.
+ * Extrae números en formato argentino de una línea.
+ * Maneja números pegados que genera pdf-parse en tablas.
  */
 function extractNums(line: string): number[] {
   return (line.match(/\d{1,3}(?:\.\d{3})*(?:,\d+)?/g) ?? [])
     .map(parseArgNumber)
-    .filter(n => n >= 0)
+    .filter(n => n > 0)
 }
 
-/**
- * Elimina patrones de fecha de una línea antes de extraer montos.
- * Evita que "10/202450.000" sea interpretado como "10" + "202" + "450.000".
- * Soporta: dd/mm/yyyy, mm/yyyy, dd/mm/yy
- */
+/** Elimina patrones de fecha para evitar interferencia con montos */
 function stripDates(line: string): string {
   return line
-    .replace(/\d{1,2}\/\d{1,2}\/\d{4}/g, ' ')   // dd/mm/yyyy
-    .replace(/\d{1,2}\/\d{1,2}\/\d{2}/g,   ' ')   // dd/mm/yy
-    .replace(/\d{1,2}\/\d{4}/g,             ' ')   // mm/yyyy o vto MM/YYYY
+    .replace(/\d{1,2}\/\d{1,2}\/\d{4}/g, ' ')
+    .replace(/\d{1,2}\/\d{1,2}\/\d{2}/g, ' ')
+    .replace(/\d{1,2}\/\d{4}/g, ' ')
+}
+
+/** Elimina porcentajes finales como "7,8%" o "100,00%" */
+function stripPercentages(line: string): string {
+  return line.replace(/\d{1,3},?\d*%/g, ' ')
 }
 
 function parseDate(s: string): string {
@@ -84,13 +104,14 @@ function parseDate(s: string): string {
   return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
 }
 
+/** Detecta el período del informe: "INFORME OCTUBRE 2024" → "2024-10" */
 function detectPeriod(text: string): string | null {
   const MONTHS: Record<string, string> = {
     ENERO: '01', FEBRERO: '02', MARZO: '03', ABRIL: '04', MAYO: '05', JUNIO: '06',
     JULIO: '07', AGOSTO: '08', SEPTIEMBRE: '09', SEPT: '09',
     OCTUBRE: '10', NOVIEMBRE: '11', DICIEMBRE: '12',
   }
-  const m = text.match(/INFORME\s+([A-ZÁÉÍÓÚÑ]+)[`´'\s]+(\d{2,4})/i)
+  const m = text.match(/INFORME\s+([A-ZÁÉÍÓÚÑ]+)[`´'\s]*(\d{2,4})/i)
   if (!m) return null
   const month = MONTHS[m[1].toUpperCase()]
   if (!month) return null
@@ -98,207 +119,158 @@ function detectPeriod(text: string): string | null {
   return `${year}-${month}`
 }
 
-function detectTC(text: string): number {
-  const all = [...text.matchAll(/TIPO CAMBIO\s*[:\-]\s*([\d.,]+)/gi)]
-  if (!all.length) return 0
-  return parseArgNumber(all[all.length - 1][1])
+/** Retorna el último día del mes para un período YYYY-MM */
+function lastDayOfMonth(period: string): string {
+  const [y, m] = period.split('-').map(Number)
+  const lastDay = new Date(y, m, 0).getDate()
+  return `${period}-${String(lastDay).padStart(2, '0')}`
 }
 
-/** Detecta la empresa por el nombre del concepto */
-function bizFromConcept(concept: string): { bizId: number; bizName: string } {
+/** Detecta la empresa a partir del nombre del concepto */
+function detectCompany(concept: string): typeof COMPANIES[number] {
   const u = concept.toUpperCase()
-  if (u.includes('GUEMES') || u.includes('GÜEMES') || u.includes('IBC'))
-    return { bizId: 1, bizName: 'GUEMES' }
+
+  // GUEMES / Promenade
+  if (u.includes('GUEMES') || u.includes('GÜEMES') || u.includes('IBC') ||
+      u.includes('PROMENADE') || u.includes('COCHERA'))
+    return COMPANIES[1] // GUEMES → Promenade (id:3)
+
+  // PDA
   if (u.includes(' PDA') || u.startsWith('PDA') || u.includes('ALVARINAS'))
-    return { bizId: 1, bizName: 'PDA' }
+    return COMPANIES[2] // PDA (id:5)
+
+  // ÑANCUL
   if (u.includes('ÑANCUL') || u.includes('NANCUL') || u.includes('LAVALLE') ||
-      u.includes('LA ESPERANZA') || u.includes('ESPERANZA') || u.includes('RAUCH'))
-    return { bizId: 2, bizName: 'ÑANCUL' }
-  if (u.includes('OLIVOS') || u.includes('EML') || u.includes('SAN ANDRES') || u.includes('ACEESA'))
-    return { bizId: 4, bizName: 'EML' }
-  return { bizId: 1, bizName: 'SADIA' }
+      u.includes('LA ESPERANZA') || u.includes('ESPERANZA') || u.includes('RAUCH') ||
+      u.includes('CALEGARI') || u.includes('COOP RAUCH') || u.includes('NUTRIJO') ||
+      u.includes('BORSANI') || u.includes('ECHANDI') || u.includes('ECOBAT') ||
+      u.includes('INSEMINACION') || u.includes('AFTOSA') || u.includes('SENASA') ||
+      u.includes('SOCIEDAD RURAL') || u.includes('GARCIA NICOLAS') ||
+      u.includes('GARCIA ALBERTO') || u.includes('SILVA GUSTAVO'))
+    return COMPANIES[3] // ÑANCUL (id:2)
+
+  // EML
+  if (u.includes('OLIVOS') || u.includes('EML') || u.includes('SAN ANDRES') ||
+      u.includes('ACEESA') || u.includes('COLEGIO') || u.includes('TRANSPORTE ESCOLAR') ||
+      u.includes('COMEDOR') || u.includes('PEUGEOT JERO') || u.includes('AF330'))
+    return COMPANIES[4] // EML (id:4)
+
+  // Default: SADIA
+  return COMPANIES[0] // Sadia (id:1)
 }
 
-// ─── MODO SUMMARY ─────────────────────────────────────────────────────────────
-
-function parseSummary(lines: string[], periodDate: string, exchangeRate: number): ParsedTransaction[] {
-  const results: ParsedTransaction[] = []
-  let nextId = 1
-
-  // 1. Ingresos por empresa (Total Ingresos :)
-  for (const line of lines) {
-    const u = line.toUpperCase()
-    if (!u.startsWith('TOTAL INGRESOS') || u.includes('EXTRAORDINARIOS')) continue
-    const nums = extractNums(line)
-    if (nums.length < 2) continue
-    const companyNums = nums.slice(0, Math.min(5, nums.length - 1))
-    companyNums.forEach((amount, idx) => {
-      if (amount <= 0) return
-      const co = COMPANIES[idx]
-      if (!co) return
-      results.push({
-        id: `pdf-${nextId++}`, selected: true, date: periodDate,
-        description: 'Ingresos Ordinarios',
-        notes: `${co.name} | INGRESOS ORDINARIOS`,
-        type: 'income', amount,
-        businessId: co.id, businessName: co.name,
-        categoryName: INCOME_CATEGORY[co.name] ?? 'Otros ingresos',
-        expenseType: 'ordinario', currency: 'ARS', exchangeRate: null,
-      })
-    })
-    break
-  }
-
-  // 2. Gastos ordinarios por subtotal de categoría
-  for (const line of lines) {
-    const u = line.toUpperCase()
-    if (!u.startsWith('SUBTOTAL')) continue
-    const sec = EXPENSE_SECTIONS.find(s => u.includes(s.keyword))
-    if (!sec) continue
-    const nums = extractNums(line)
-    if (nums.length < 2) continue
-    const companyNums = nums.slice(0, Math.min(5, nums.length - 1))
-    companyNums.forEach((amount, idx) => {
-      if (amount <= 0) return
-      const co = COMPANIES[idx]
-      if (!co) return
-      results.push({
-        id: `pdf-${nextId++}`, selected: true, date: periodDate,
-        description: sec.category,
-        notes: `${co.name} | GASTOS ORDINARIOS`,
-        type: 'expense', amount,
-        businessId: co.id, businessName: co.name,
-        categoryName: sec.category,
-        expenseType: 'ordinario', currency: 'ARS', exchangeRate: null,
-      })
-    })
-  }
-
-  // 3. Extraordinarios (totales por empresa)
-  const EXTRA_TOTAL_RE = [
-    { re: /SADIA\s*[-–]\s*TOTAL GASTOS EXTRAORDINARIOS\s*[:\-]\s*([\d.,]+)/i,  bizId: 1, bizName: 'SADIA' },
-    { re: /GUEMES\s*[-–]\s*TOTAL GASTOS EXTRAORDINARIOS\s*[:\-]\s*([\d.,]+)/i, bizId: 1, bizName: 'GUEMES' },
-    { re: /(?:ÑANCUL|NANCUL)\s*[-–]\s*TOTAL GASTOS EXTRAORDINARIOS\s*[:\-]\s*([\d.,]+)/i, bizId: 2, bizName: 'ÑANCUL' },
-    { re: /EML\s*[-–]\s*TOTAL GASTOS EXTRAORDINARIOS\s*[:\-]\s*([\d.,]+)/i,    bizId: 4, bizName: 'EML' },
-  ]
-  for (const line of lines) {
-    for (const { re, bizId, bizName } of EXTRA_TOTAL_RE) {
-      const m = line.match(re)
-      if (!m) continue
-      const amount = parseArgNumber(m[1])
-      if (amount <= 0) continue
-      results.push({
-        id: `pdf-${nextId++}`, selected: true, date: periodDate,
-        description: `Gastos Extraordinarios ${bizName}`,
-        notes: `${bizName} | TOTAL GASTOS EXTRAORDINARIOS`,
-        type: 'expense', amount,
-        businessId: bizId, businessName: bizName,
-        categoryName: 'Varios', expenseType: 'extraordinario',
-        currency: 'ARS', exchangeRate: null,
-      })
-    }
-  }
-
-  results.forEach((t, i) => { t.id = `pdf-${i + 1}` })
-  return results
+/** Detecta si una línea de ingreso es un alquiler o "otros ingresos" */
+function incomeCategory(concept: string): { id: number; name: string } {
+  const u = concept.toUpperCase()
+  // "Otros ingresos": PDA recupero gastos, Ñancul ventas
+  if (u.includes('PDA') || u.includes('ALVARINAS') || u.includes('RECUPERO') ||
+      u.includes('ÑANCUL') || u.includes('NANCUL') || u.includes('VENTA'))
+    return CATEGORY_MAP['OTROS_INGRESOS']
+  // Todo lo demás es alquiler
+  return CATEGORY_MAP['ALQUILERES']
 }
 
-// ─── MODO DETAIL ──────────────────────────────────────────────────────────────
+/** Mapea medio de pago a cuenta */
+function mapAccount(medioPago: string): { id: number; name: string } {
+  const u = medioPago.toUpperCase().trim()
+  if (u === 'EFVO' || u.includes('EFECTIVO'))
+    return ACCOUNT_MAP['EFVO']
+  return ACCOUNT_MAP['DEFAULT']
+}
 
-function parseDetail(lines: string[], periodDate: string, exchangeRate: number): ParsedTransaction[] {
+/** Detecta IVA en una línea: si menciona "IVA" y tiene un monto → iva_rate=21 */
+function detectIva(concept: string): number | null {
+  const u = concept.toUpperCase()
+  if (u === 'IVA' || u.startsWith('IVA ') || u.includes(' IVA ') || u.includes('IVA 21'))
+    return 21
+  return null
+}
+
+// ─── PARSING SECCIONES ──────────────────────────────────────────────────────────
+
+interface ParserContext {
+  lines: string[]
+  periodDate: string // YYYY-MM-DD (último día del mes)
+  period: string     // YYYY-MM
+  nextId: number
+}
+
+function mkTx(
+  ctx: ParserContext,
+  overrides: Partial<ParsedTransaction> & Pick<ParsedTransaction, 'description' | 'type' | 'amount' | 'businessId' | 'businessName'>
+): ParsedTransaction {
+  return {
+    id: `pdf-${ctx.nextId++}`,
+    selected: true,
+    date: overrides.date ?? ctx.periodDate,
+    description: overrides.description,
+    notes: overrides.notes ?? '',
+    type: overrides.type,
+    amount: overrides.amount,
+    businessId: overrides.businessId,
+    businessName: overrides.businessName,
+    categoryName: overrides.categoryName ?? null,
+    expenseType: overrides.expenseType ?? 'ordinario',
+    currency: overrides.currency ?? 'ARS',
+    exchangeRate: null, // No guardamos TC del archivo
+    accountId: overrides.accountId ?? null,
+    accountName: overrides.accountName ?? null,
+    ivaRate: overrides.ivaRate ?? null,
+  }
+}
+
+// ─── 1. GASTOS ORDINARIOS (Pág 6-8) ─────────────────────────────────────────
+
+function parseOrdinaryExpenses(ctx: ParserContext): ParsedTransaction[] {
   const results: ParsedTransaction[] = []
-  let nextId = 1
+  const { lines } = ctx
 
-  // ── 1. Ingresos ordinarios individuales ──────────────────────────────────────
-  for (const line of lines) {
-    const u = line.trim().toUpperCase()
-    // Ignorar totales y subtotales
-    if (u.startsWith('TOTAL') || u.startsWith('SUBTOTAL')) continue
-    const isIncomeLine = INCOME_PREFIXES.some(p => u.startsWith(p))
-    if (!isIncomeLine) continue
-
-    const nums = extractNums(stripDates(line))
-    if (!nums.length) continue
-
-    // Concepto = texto antes del primer número (en la línea original sin stripear)
-    const firstDigit = line.search(/\d/)
-    const concept = firstDigit > 0 ? line.slice(0, firstDigit).trim() : line.trim()
-    if (!concept) continue
-
-    // Si el concepto ya menciona una empresa específica → 1 transacción con el mayor valor
-    const mentionsCompany = /SADIA|GUEMES|GÜEMES|IBC|PDA|ÑANCUL|NANCUL|EML/i.test(concept)
-    if (mentionsCompany || nums.length === 1) {
-      const amount = nums.length === 1 ? nums[0] : Math.max(...nums)
-      if (amount <= 0) continue
-      const { bizId, bizName } = bizFromConcept(concept)
-      results.push({
-        id: `pdf-${nextId++}`, selected: true, date: periodDate,
-        description: concept,
-        notes: `${bizName} | INGRESOS ORDINARIOS`,
-        type: 'income', amount,
-        businessId: bizId, businessName: bizName,
-        categoryName: INCOME_CATEGORY[bizName] ?? 'Otros ingresos',
-        expenseType: 'ordinario', currency: 'ARS', exchangeRate: null,
-      })
-    } else {
-      // Múltiples columnas por empresa: todos los valores excepto el último (total)
-      // se asignan a cada empresa según el orden de COMPANIES
-      const companyNums = nums.slice(0, Math.min(COMPANIES.length, nums.length - 1))
-      companyNums.forEach((amount, idx) => {
-        if (amount <= 0) return
-        const co = COMPANIES[idx]
-        if (!co) return
-        results.push({
-          id: `pdf-${nextId++}`, selected: true, date: periodDate,
-          description: concept,
-          notes: `${co.name} | INGRESOS ORDINARIOS`,
-          type: 'income', amount,
-          businessId: co.id, businessName: co.name,
-          categoryName: INCOME_CATEGORY[co.name] ?? 'Otros ingresos',
-          expenseType: 'ordinario', currency: 'ARS', exchangeRate: null,
-        })
-      })
-    }
+  // Buscar el inicio de la tabla detallada: "INFORME [MES]`[AÑO]" con columnas empresa
+  const detailStart = lines.findIndex(l =>
+    /INFORME\s+[A-ZÁÉÍÓÚÑ]+[`´'\s]*\d{2,4}\s+SADIA/i.test(l)
+  )
+  if (detailStart < 0) {
+    console.log('[Parser] No se encontró tabla detallada de gastos ordinarios')
+    return results
   }
 
-  // Si no encontramos ingresos individuales, usar el Total Ingresos
-  if (results.filter(t => t.type === 'income').length === 0) {
-    for (const line of lines) {
-      const u = line.toUpperCase()
-      if (!u.startsWith('TOTAL INGRESOS') || u.includes('EXTRAORDINARIOS')) continue
-      const nums = extractNums(line)
-      if (nums.length < 2) continue
-      const companyNums = nums.slice(0, Math.min(5, nums.length - 1))
-      companyNums.forEach((amount, idx) => {
-        if (amount <= 0) return
-        const co = COMPANIES[idx]
-        if (!co) return
-        results.push({
-          id: `pdf-${nextId++}`, selected: true, date: periodDate,
-          description: 'Ingresos Ordinarios',
-          notes: `${co.name} | INGRESOS ORDINARIOS`,
-          type: 'income', amount,
-          businessId: co.id, businessName: co.name,
-          categoryName: INCOME_CATEGORY[co.name] ?? 'Otros ingresos',
-          expenseType: 'ordinario', currency: 'ARS', exchangeRate: null,
-        })
-      })
-      break
-    }
-  }
-
-  // ── 2. Gastos ordinarios individuales (líneas entre header y subtotal) ────────
   for (const sec of EXPENSE_SECTIONS) {
-    // Encontrar el índice del Subtotal de esta sección
-    const subtotalIdx = lines.findIndex(l => {
+    // Buscar Subtotal de esta sección (después del detailStart)
+    const subtotalIdx = lines.findIndex((l, i) => {
+      if (i <= detailStart) return false
       const u = l.toUpperCase()
-      return u.startsWith('SUBTOTAL') && u.includes(sec.keyword)
+      return u.includes('SUBTOTAL') && u.includes(sec.subtotalKey)
     })
     if (subtotalIdx < 0) continue
 
-    // Buscar el header de la sección hacia atrás
+    // Parsear subtotal para obtener montos por empresa
+    const subtotalNums = extractNums(stripPercentages(lines[subtotalIdx]))
+    // subtotalNums debería tener 6 valores: SADIA, GUEMES, PDA, ÑANCUL, EML, Total
+    // o menos si algunas empresas tienen 0 y no aparecen
+    let companySubtotals: Record<CompanyKey, number> = {
+      SADIA: 0, GUEMES: 0, PDA: 0, ÑANCUL: 0, EML: 0,
+    }
+    if (subtotalNums.length >= 6) {
+      // Mapeo directo: 5 empresas + total
+      COMPANIES.forEach((co, i) => { companySubtotals[co.key] = subtotalNums[i] })
+    } else if (subtotalNums.length >= 2) {
+      // Subtotal con algunas empresas en 0
+      // El último valor es el total, los anteriores son las empresas con valor > 0
+      const total = subtotalNums[subtotalNums.length - 1]
+      const companyVals = subtotalNums.slice(0, -1)
+      const sumVals = companyVals.reduce((s, v) => s + v, 0)
+
+      if (Math.abs(sumVals - total) < 10) {
+        // Los valores suman al total → son montos de empresa
+        // Determinar qué empresas tienen valores basado en el contexto de la sección
+        // Asignar por orden a las empresas que tienen valores
+        assignValuesToCompanies(companyVals, companySubtotals, sec.catKey)
+      }
+    }
+
+    // Buscar header de la sección (antes del subtotal)
     let headerIdx = -1
-    for (let i = subtotalIdx - 1; i >= Math.max(0, subtotalIdx - 80); i--) {
+    for (let i = subtotalIdx - 1; i >= Math.max(detailStart, subtotalIdx - 100); i--) {
       const u = lines[i].toUpperCase().trim()
       if (u === sec.header || u.startsWith(sec.header + ' ') || u.startsWith(sec.header + '\t')) {
         headerIdx = i
@@ -307,175 +279,588 @@ function parseDetail(lines: string[], periodDate: string, exchangeRate: number):
     }
     if (headerIdx < 0) continue
 
-    // Parsear líneas entre header y subtotal
+    const cat = CATEGORY_MAP[sec.catKey]
+
+    // Parsear líneas individuales entre header y subtotal
     for (let i = headerIdx + 1; i < subtotalIdx; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
+      const rawLine = lines[i].trim()
+      if (!rawLine) continue
 
-      const u = line.toUpperCase()
-      // Ignorar headers, totales, columnas
+      const u = rawLine.toUpperCase()
+      // Ignorar headers de columna, subtotales, líneas de sección
       if (u.startsWith('SUBTOTAL') || u.startsWith('TOTAL') ||
-          u === 'SADIA' || u === 'GUEMES' || u === 'PDA' ||
-          u === 'ÑANCUL' || u === 'EML' || u === sec.header) continue
+          u === sec.header || u.includes('INFORME') ||
+          /^(SADIA|GUEMES|PDA|ÑANCUL|EML|TOTAL)\s*$/i.test(u)) continue
 
-      // Limpiar fechas antes de extraer montos para evitar que "10/202450.000"
-      // sea parseado como 450.000 en vez de 50.000.
-      const nums = extractNums(stripDates(line))
+      // Limpiar y extraer números
+      const cleanLine = stripPercentages(stripDates(rawLine))
+      const nums = extractNums(cleanLine)
       if (!nums.length) continue
-      // Usar el mayor número de la fila (el total es siempre el más grande);
-      // filtrar artefactos pequeños (nros de página, etc.) con umbral 10.
-      const validNums = nums.filter(n => n >= 10)
-      if (!validNums.length) continue
-      const amount = Math.max(...validNums)
-      if (amount <= 0) continue
 
       // Concepto = texto antes del primer número
+      const firstDigit = rawLine.search(/\d/)
+      if (firstDigit <= 0) continue
+      const concept = rawLine.slice(0, firstDigit).trim()
+        .replace(/[-–—]+$/, '').trim() // limpiar guiones al final
+      if (!concept || concept.length < 2) continue
+
+      // Detectar IVA
+      const ivaRate = detectIva(concept)
+
+      // Determinar si es línea multi-empresa o single
+      if (nums.length === 1) {
+        // Un solo número → una empresa
+        const amount = nums[0]
+        if (amount <= 0) continue
+        const co = detectCompanyForExpense(concept, companySubtotals, amount)
+        results.push(mkTx(ctx, {
+          description: concept,
+          notes: `${co.key} | ${cat.name}`,
+          type: 'expense',
+          amount,
+          businessId: co.id,
+          businessName: co.dbName,
+          categoryName: cat.name,
+          expenseType: 'ordinario',
+          ivaRate,
+        }))
+      } else if (nums.length === 2 && nums[0] === nums[1]) {
+        // Dos números iguales → empresa única, valor = total
+        const amount = nums[0]
+        if (amount <= 0) continue
+        const co = detectCompanyForExpense(concept, companySubtotals, amount)
+        results.push(mkTx(ctx, {
+          description: concept,
+          notes: `${co.key} | ${cat.name}`,
+          type: 'expense',
+          amount,
+          businessId: co.id,
+          businessName: co.dbName,
+          categoryName: cat.name,
+          expenseType: 'ordinario',
+          ivaRate,
+        }))
+      } else {
+        // Múltiples números → último es total, anteriores son por empresa
+        const total = nums[nums.length - 1]
+        const companyVals = nums.slice(0, -1)
+        const sumVals = companyVals.reduce((s, v) => s + v, 0)
+
+        if (Math.abs(sumVals - total) < 10 && companyVals.length > 1) {
+          // Los valores suman al total → crear transacción por cada empresa
+          const activeCos = COMPANIES.filter(co => companySubtotals[co.key] > 0)
+
+          if (companyVals.length === activeCos.length) {
+            // Mapeo directo a empresas activas
+            companyVals.forEach((amount, idx) => {
+              if (amount <= 0) return
+              const co = activeCos[idx]
+              results.push(mkTx(ctx, {
+                description: concept,
+                notes: `${co.key} | ${cat.name}`,
+                type: 'expense',
+                amount,
+                businessId: co.id,
+                businessName: co.dbName,
+                categoryName: cat.name,
+                expenseType: 'ordinario',
+                ivaRate,
+              }))
+            })
+          } else if (companyVals.length === 5) {
+            // Todas las empresas tienen valor
+            companyVals.forEach((amount, idx) => {
+              if (amount <= 0) return
+              const co = COMPANIES[idx]
+              results.push(mkTx(ctx, {
+                description: concept,
+                notes: `${co.key} | ${cat.name}`,
+                type: 'expense',
+                amount,
+                businessId: co.id,
+                businessName: co.dbName,
+                categoryName: cat.name,
+                expenseType: 'ordinario',
+                ivaRate,
+              }))
+            })
+          } else {
+            // No podemos mapear con certeza → una transacción con total
+            const co = detectCompanyForExpense(concept, companySubtotals, total)
+            results.push(mkTx(ctx, {
+              description: `${concept} (desglose: ${companyVals.join(' + ')})`,
+              notes: `MULTI-EMPRESA | ${cat.name}`,
+              type: 'expense',
+              amount: total,
+              businessId: co.id,
+              businessName: co.dbName,
+              categoryName: cat.name,
+              expenseType: 'ordinario',
+              ivaRate,
+            }))
+          }
+        } else {
+          // No suman al total → usar el mayor valor (probablemente el total)
+          const amount = Math.max(...nums)
+          if (amount <= 0) continue
+          const co = detectCompanyForExpense(concept, companySubtotals, amount)
+          results.push(mkTx(ctx, {
+            description: concept,
+            notes: `${co.key} | ${cat.name}`,
+            type: 'expense',
+            amount,
+            businessId: co.id,
+            businessName: co.dbName,
+            categoryName: cat.name,
+            expenseType: 'ordinario',
+            ivaRate,
+          }))
+        }
+      }
+    }
+  }
+
+  return results
+}
+
+/** Detecta empresa para un gasto basándose en concepto y subtotales */
+function detectCompanyForExpense(
+  concept: string,
+  subtotals: Record<CompanyKey, number>,
+  amount: number,
+): typeof COMPANIES[number] {
+  // Primero intentar por nombre del concepto
+  const co = detectCompany(concept)
+  // Verificar que la empresa tiene montos en esta categoría
+  if (subtotals[co.key] > 0) return co
+
+  // Si la empresa detectada no tiene montos, buscar la empresa con subtotal > 0
+  // que más se acerca al monto
+  for (const company of COMPANIES) {
+    if (subtotals[company.key] >= amount) return company
+  }
+  // Fallback: primera empresa con subtotal > 0
+  for (const company of COMPANIES) {
+    if (subtotals[company.key] > 0) return company
+  }
+  return COMPANIES[0] // SADIA por defecto
+}
+
+/** Asigna valores a empresas cuando no tenemos todas las columnas */
+function assignValuesToCompanies(
+  values: number[],
+  target: Record<CompanyKey, number>,
+  _sectionKey: string,
+): void {
+  // Asignar por posición a las primeras N empresas
+  // Esto es un best-effort cuando hay columnas vacías
+  COMPANIES.forEach((co, i) => {
+    target[co.key] = i < values.length ? values[i] : 0
+  })
+}
+
+// ─── 2. INGRESOS DETALLADOS (Pág 9) ─────────────────────────────────────────
+
+function parseIncomeDetails(ctx: ParserContext): ParsedTransaction[] {
+  const results: ParsedTransaction[] = []
+  const { lines } = ctx
+
+  // Buscar inicio de sección de ingresos detallados
+  const incomeStart = lines.findIndex(l =>
+    /DETALLE\s+INGRESOS/i.test(l)
+  )
+  if (incomeStart < 0) {
+    console.log('[Parser] No se encontró sección DETALLE INGRESOS')
+    return results
+  }
+
+  // Buscar fin de sección (siguiente sección de gastos extraordinarios)
+  const incomeEnd = lines.findIndex((l, i) =>
+    i > incomeStart && /GASTOS EXTRAORDINARIOS/i.test(l)
+  )
+  const endIdx = incomeEnd > 0 ? incomeEnd : lines.length
+
+  // ── SADIA: Facturas con Fc N°, Monto USD, TC, Total cobrado ──
+  let inSadia = false
+  let inGuemes = false
+  let inNancul = false
+
+  for (let i = incomeStart + 1; i < endIdx; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+    const u = line.toUpperCase()
+
+    // Detectar cambio de subsección
+    if (u.includes('SADIA') && (u.includes('FC') || u.includes('MONTO USD') || i === incomeStart + 1)) {
+      inSadia = true; inGuemes = false; inNancul = false; continue
+    }
+    if (u.startsWith('GUEMES') || (u.includes('GUEMES') && u.includes('MONTO USD'))) {
+      inSadia = false; inGuemes = true; inNancul = false; continue
+    }
+    if (u.startsWith('ÑANCUL') || u.startsWith('NANCUL') || (u.includes('ÑANCUL') && u.includes('MONTO'))) {
+      inSadia = false; inGuemes = false; inNancul = true; continue
+    }
+
+    // Ignorar headers, totales, líneas vacías
+    if (u.includes('TOTALES:') || u.startsWith('TOTAL') || u.startsWith('FC N') ||
+        u.includes('MONTO USD') || u === 'TC' || u === 'TOTAL' ||
+        u.includes('RETENCIONES') || u.includes('NOTAS')) continue
+
+    if (inSadia) {
+      // Formato: CONCEPTO [Fc N°] [USD XX.XXX] [TC] TOTAL_COBRADO [RETENCIONES] [TOTAL_FC]
+      // Solo nos importa: concepto y total cobrado (ignoramos retenciones)
+      const nums = extractNums(stripPercentages(line))
+      if (!nums.length) continue
+
+      const firstDigit = line.search(/\d/)
+      if (firstDigit <= 0) continue
+      let concept = line.slice(0, firstDigit).trim()
+      if (!concept || concept.length < 2) continue
+
+      // Detectar si hay monto USD
+      const usdMatch = line.match(/USD\s*([\d.,]+)/i)
+      let currency: 'ARS' | 'USD' = 'ARS'
+
+      // El "total cobrado" es generalmente el primer número grande (no el USD amount)
+      // Para facturas SADIA: tomamos el primer número que parece ARS (>10000)
+      let amount = 0
+      if (usdMatch) {
+        // Hay USD → buscar el monto ARS más grande (total cobrado)
+        const arsNums = nums.filter(n => n > 10000) // filtrar Fc N° y otros números chicos
+        amount = arsNums.length > 0 ? arsNums[0] : nums[0]
+        currency = 'ARS' // Guardamos en ARS (total cobrado)
+      } else {
+        amount = nums[0]
+      }
+
+      if (amount <= 0) continue
+
+      // Limpiar concepto de números de factura
+      concept = concept.replace(/\d+[-]?NC?\s*$/, '').trim()
+
+      results.push(mkTx(ctx, {
+        description: concept,
+        notes: 'SADIA | Ingresos Alquileres',
+        type: 'income',
+        amount,
+        businessId: 1,
+        businessName: 'Sadia',
+        categoryName: 'Alquileres',
+        expenseType: 'ordinario',
+      }))
+    }
+
+    if (inGuemes) {
+      // Formato: Dpto Guemes XXXX [USDYYY] [TC] TOTAL
+      const nums = extractNums(line)
+      if (!nums.length) continue
+
       const firstDigit = line.search(/\d/)
       if (firstDigit <= 0) continue
       const concept = line.slice(0, firstDigit).trim()
       if (!concept || concept.length < 2) continue
 
-      const { bizId, bizName } = bizFromConcept(concept)
-
-      results.push({
-        id: `pdf-${nextId++}`, selected: true, date: periodDate,
-        description: concept,
-        notes: `${bizName} | ${sec.category}`,
-        type: 'expense', amount,
-        businessId: bizId, businessName: bizName,
-        categoryName: sec.category,
-        expenseType: 'ordinario', currency: 'ARS', exchangeRate: null,
-      })
-    }
-  }
-
-  // ── 3. Gastos extraordinarios individuales (con fecha) ────────────────────────
-  const EXTRA_SECTIONS = [
-    { re: /^SADIA\s*[-–]\s*GASTOS EXTRAORDINARIOS/i,              bizId: 1, bizName: 'SADIA'  },
-    { re: /^GUEMES\s*[-–]\s*GASTOS EXTRAORDINARIOS/i,             bizId: 1, bizName: 'GUEMES' },
-    { re: /^PDA\s*[-–]\s*GASTOS EXTRAORDINARIOS/i,                bizId: 1, bizName: 'PDA'    },
-    { re: /^(?:ÑANCUL|NANCUL)\s*[-–]\s*GASTOS EXTRAORDINARIOS/i, bizId: 2, bizName: 'ÑANCUL' },
-    { re: /^EML\s*[-–]\s*GASTOS EXTRAORDINARIOS/i,               bizId: 4, bizName: 'EML'    },
-    { re: /^ML\s*[-–]\s*DETALLE GASTOS/i,                        bizId: 4, bizName: 'EML'    },
-  ]
-  const NEXT_SECTION_RE = /^(?:SADIA|GUEMES|PDA|ÑANCUL|NANCUL|EML|ML)\s*[-–]\s*(GASTOS|DETALLE)/i
-
-  for (const { re, bizId, bizName } of EXTRA_SECTIONS) {
-    const startIdx = lines.findIndex(l => re.test(l.trim()))
-    if (startIdx < 0) continue
-
-    for (let i = startIdx + 1; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (i > startIdx + 1 && NEXT_SECTION_RE.test(line)) break
-
-      const dateM = line.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s+(.+)/)
-      if (!dateM) continue
-      const date = parseDate(dateM[1])
-      if (!date) continue
-
-      const rest = dateM[2]
-      if (/TOTAL/i.test(rest)) continue
-
-      const firstDigit = rest.search(/\d/)
-      const concept = firstDigit > 0 ? rest.slice(0, firstDigit).trim() : rest.trim()
-      if (!concept || concept.length < 2) continue
-
-      // Detectar USD
-      const usdM = rest.match(/USD\s*([\d.,]+)\s+([\d.,]+)/i)
-      let amount: number
-      let currency: 'ARS' | 'USD' = 'ARS'
-      let txTC: number | null = null
-
-      if (usdM) {
-        const usdAmt = parseArgNumber(usdM[1])
-        const tc = parseArgNumber(usdM[2])
-        amount = tc > 0 ? usdAmt * tc : usdAmt * (exchangeRate || 1)
-        currency = 'USD'
-        txTC = tc > 0 ? tc : exchangeRate
-      } else {
-        const nums = extractNums(rest)
-        if (!nums.length) continue
-        amount = Math.max(...nums)
-      }
+      // Último número = monto en ARS
+      const amount = nums[nums.length - 1]
       if (amount <= 0) continue
 
-      const medioPago = rest.split(/\s{2,}/).pop()?.trim() ?? ''
-
-      results.push({
-        id: `pdf-${nextId++}`, selected: true, date,
+      results.push(mkTx(ctx, {
         description: concept,
-        notes: medioPago || bizName,
-        type: 'expense', amount,
-        businessId: bizId, businessName: bizName,
-        categoryName: 'Varios', expenseType: 'extraordinario',
-        currency, exchangeRate: txTC,
-      })
+        notes: 'GUEMES | Alquileres Deptos',
+        type: 'income',
+        amount,
+        businessId: 3,
+        businessName: 'Promenade',
+        categoryName: 'Alquileres',
+        expenseType: 'ordinario',
+      }))
+    }
+
+    if (inNancul) {
+      const nums = extractNums(line)
+      if (!nums.length) continue
+      const firstDigit = line.search(/\d/)
+      if (firstDigit <= 0) continue
+      const concept = line.slice(0, firstDigit).trim()
+      if (!concept || concept.length < 2) continue
+      const amount = nums[nums.length - 1]
+      if (amount <= 0) continue
+
+      results.push(mkTx(ctx, {
+        description: concept,
+        notes: 'ÑANCUL | Ingresos',
+        type: 'income',
+        amount,
+        businessId: 2,
+        businessName: 'Ñancul',
+        categoryName: 'Otros ingresos',
+        expenseType: 'ordinario',
+      }))
     }
   }
 
-  // Si no encontramos extraordinarios individuales, usar totales como fallback
-  if (results.filter(t => t.expenseType === 'extraordinario').length === 0) {
-    const EXTRA_TOTAL_RE = [
-      { re: /SADIA\s*[-–]\s*TOTAL GASTOS EXTRAORDINARIOS\s*[:\-]\s*([\d.,]+)/i,  bizId: 1, bizName: 'SADIA' },
-      { re: /GUEMES\s*[-–]\s*TOTAL GASTOS EXTRAORDINARIOS\s*[:\-]\s*([\d.,]+)/i, bizId: 1, bizName: 'GUEMES' },
-      { re: /(?:ÑANCUL|NANCUL)\s*[-–]\s*TOTAL GASTOS EXTRAORDINARIOS\s*[:\-]\s*([\d.,]+)/i, bizId: 2, bizName: 'ÑANCUL' },
-      { re: /EML\s*[-–]\s*TOTAL GASTOS EXTRAORDINARIOS\s*[:\-]\s*([\d.,]+)/i,    bizId: 4, bizName: 'EML' },
-    ]
-    for (const line of lines) {
-      for (const { re, bizId, bizName } of EXTRA_TOTAL_RE) {
-        const m = line.match(re)
-        if (!m) continue
-        const amount = parseArgNumber(m[1])
-        if (amount <= 0) continue
-        results.push({
-          id: `pdf-${nextId++}`, selected: true, date: periodDate,
-          description: `Gastos Extraordinarios ${bizName}`,
-          notes: `${bizName} | TOTAL GASTOS EXTRAORDINARIOS`,
-          type: 'expense', amount,
-          businessId: bizId, businessName: bizName,
-          categoryName: 'Varios', expenseType: 'extraordinario',
-          currency: 'ARS', exchangeRate: null,
-        })
-      }
-    }
+  // ── Ingresos ordinarios de la tabla (Pág 6) como fallback si no hay detalles ──
+  if (results.length === 0) {
+    console.log('[Parser] Fallback: parseando ingresos desde tabla resumen')
+    parseIncomeFromSummaryTable(ctx, results)
   }
 
-  results.forEach((t, i) => { t.id = `pdf-${i + 1}` })
   return results
 }
 
-// ─── PARSER PRINCIPAL ─────────────────────────────────────────────────────────
+/** Fallback: extrae ingresos de la tabla resumen (Pág 6) */
+function parseIncomeFromSummaryTable(ctx: ParserContext, results: ParsedTransaction[]): void {
+  const { lines } = ctx
+  for (const line of lines) {
+    const u = line.toUpperCase()
+    if (u.includes('INGRESOS ALQUILERES') || u.includes('INGRESOS PDA') ||
+        u.includes('INGRESOS ÑANCUL') || u.includes('INGRESOS NANCUL')) {
+      const nums = extractNums(stripPercentages(line))
+      if (!nums.length) continue
+      const amount = nums[nums.length - 1] // total
+      if (amount <= 0) continue
+
+      const firstDigit = line.search(/\d/)
+      const concept = firstDigit > 0 ? line.slice(0, firstDigit).trim() : line.trim()
+      const co = detectCompany(concept)
+      const cat = incomeCategory(concept)
+
+      results.push(mkTx(ctx, {
+        description: concept,
+        notes: `${co.key} | Ingresos`,
+        type: 'income',
+        amount,
+        businessId: co.id,
+        businessName: co.dbName,
+        categoryName: cat.name,
+        expenseType: 'ordinario',
+      }))
+    }
+  }
+}
+
+// ─── 3. GASTOS EXTRAORDINARIOS (Pág 10-11) ──────────────────────────────────
+
+function parseExtraordinary(ctx: ParserContext): ParsedTransaction[] {
+  const results: ParsedTransaction[] = []
+  const { lines } = ctx
+
+  const EXTRA_SECTIONS = [
+    { re: /^SADIA\s*[-–]\s*GASTOS EXTRAORDINARIOS/i,              company: COMPANIES[0] },
+    { re: /^GUEMES\s*[-–]\s*GASTOS EXTRAORDINARIOS/i,             company: COMPANIES[1] },
+    { re: /^PDA\s*[-–]\s*GASTOS EXTRAORDINARIOS/i,                company: COMPANIES[2] },
+    { re: /^(?:ÑANCUL|NANCUL)\s*[-–]\s*GASTOS EXTRAORDINARIOS/i,  company: COMPANIES[3] },
+    { re: /^EML\s*[-–]\s*GASTOS EXTRAORDINARIOS/i,                company: COMPANIES[4] },
+  ]
+
+  const SECTION_END_RE = /^(?:SADIA|GUEMES|PDA|ÑANCUL|NANCUL|EML|ML)\s*[-–]\s*(GASTOS|DETALLE|TOTAL)/i
+
+  for (const { re, company } of EXTRA_SECTIONS) {
+    const startIdx = lines.findIndex(l => re.test(l.trim()))
+    if (startIdx < 0) continue
+
+    // Buscar fin de sección
+    let endIdx = lines.length
+    for (let i = startIdx + 1; i < lines.length; i++) {
+      const trimmed = lines[i].trim()
+      if (SECTION_END_RE.test(trimmed) && !re.test(trimmed)) {
+        endIdx = i
+        break
+      }
+    }
+
+    // Parsear líneas con fecha
+    for (let i = startIdx + 1; i < endIdx; i++) {
+      const line = lines[i].trim()
+      if (!line) continue
+
+      // Detectar línea de fecha: dd/mm/yyyy CONCEPTO ... MONTO MEDIO_PAGO
+      const dateMatch = line.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s+(.+)/)
+      if (!dateMatch) continue
+      const date = parseDate(dateMatch[1])
+      if (!date) continue
+
+      const rest = dateMatch[2]
+      if (/TOTAL/i.test(rest)) continue
+
+      // Extraer números del resto
+      const nums = extractNums(rest)
+      if (!nums.length) continue
+
+      // Concepto = texto antes del primer número
+      const firstDigit = rest.search(/\d/)
+      let concept = firstDigit > 0 ? rest.slice(0, firstDigit).trim() : rest.trim()
+      if (!concept || concept.length < 2) continue
+
+      // Detectar USD
+      const usdMatch = rest.match(/USD\s*([\d.,]+)\s+([\d.,]+)/i)
+      let amount: number
+      let currency: 'ARS' | 'USD' = 'ARS'
+
+      if (usdMatch) {
+        const usdAmt = parseArgNumber(usdMatch[1])
+        const tc = parseArgNumber(usdMatch[2])
+        // Buscar el monto ARS después del TC
+        const afterUsd = rest.slice(rest.indexOf(usdMatch[0]) + usdMatch[0].length)
+        const arsNums = extractNums(afterUsd)
+        amount = arsNums.length > 0 ? arsNums[0] : (tc > 0 ? usdAmt * tc : usdAmt)
+        currency = 'ARS' // Guardamos siempre en ARS
+      } else {
+        amount = nums[0] // Primer número grande
+      }
+      if (amount <= 0) continue
+
+      // Medio de pago = último token de texto
+      const tokens = rest.split(/\s{2,}/)
+      const lastToken = tokens[tokens.length - 1]?.trim() ?? ''
+      const medioPago = /[A-Z]{2,}/.test(lastToken) ? lastToken : ''
+      const account = medioPago ? mapAccount(medioPago) : null
+
+      results.push(mkTx(ctx, {
+        date,
+        description: concept,
+        notes: medioPago ? `${company.key} | ${medioPago}` : company.key,
+        type: 'expense',
+        amount,
+        businessId: company.id,
+        businessName: company.dbName,
+        categoryName: 'Otros',
+        expenseType: 'extraordinario',
+        accountId: account?.id ?? null,
+        accountName: account?.name ?? null,
+      }))
+    }
+  }
+
+  return results
+}
+
+// ─── 4. ML RETIROS (Pág 11) ─────────────────────────────────────────────────
+
+function parseMLRetiros(ctx: ParserContext): ParsedTransaction[] {
+  const results: ParsedTransaction[] = []
+  const { lines } = ctx
+
+  const mlStart = lines.findIndex(l => /^ML\s*[-–]\s*DETALLE GASTOS/i.test(l.trim()))
+  if (mlStart < 0) {
+    console.log('[Parser] No se encontró sección ML - DETALLE GASTOS')
+    return results
+  }
+
+  // Fin de sección: próximo header o fin de archivo
+  let mlEnd = lines.length
+  for (let i = mlStart + 1; i < lines.length; i++) {
+    const u = lines[i].trim().toUpperCase()
+    if (/^(?:SADIA|GUEMES|PDA|ÑANCUL|NANCUL|EML|OCT|NOV|DIC|ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SEP)\s*[`´'\-–]/i.test(u) ||
+        /^TOTALES/i.test(u) || /^COMISIONES/i.test(u)) {
+      mlEnd = i
+      break
+    }
+  }
+
+  for (let i = mlStart + 1; i < mlEnd; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+
+    const u = line.toUpperCase()
+    if (u.includes('FECHA') || u.includes('CONCEPTO') || u.includes('TOTAL') ||
+        u.includes('MEDIO PAGO') || u === 'USD' || u === 'TC') continue
+
+    // Detectar línea con fecha
+    const dateMatch = line.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s+(.+)/)
+    if (!dateMatch) continue
+    const date = parseDate(dateMatch[1])
+    if (!date) continue
+
+    const rest = dateMatch[2]
+    const nums = extractNums(rest)
+    if (!nums.length) continue
+
+    const firstDigit = rest.search(/\d/)
+    const concept = firstDigit > 0 ? rest.slice(0, firstDigit).trim() : rest.trim()
+    if (!concept || concept.length < 2) continue
+
+    const amount = nums[0]
+    if (amount <= 0) continue
+
+    // Medio de pago
+    const tokens = rest.split(/\s{2,}/)
+    const lastToken = tokens[tokens.length - 1]?.trim() ?? ''
+    const medioPago = /[A-Z]{2,}/.test(lastToken) ? lastToken : ''
+    const account = medioPago ? mapAccount(medioPago) : null
+
+    results.push(mkTx(ctx, {
+      date,
+      description: concept,
+      notes: medioPago ? `ML | ${medioPago}` : 'ML',
+      type: 'expense',
+      amount,
+      businessId: 4,  // EML
+      businessName: 'EML',
+      categoryName: 'Otros',
+      expenseType: 'extraordinario',
+      accountId: account?.id ?? null,
+      accountName: account?.name ?? null,
+    }))
+  }
+
+  return results
+}
+
+// ─── PARSER PRINCIPAL ───────────────────────────────────────────────────────────
 
 export async function parsePdfReport(
   buffer: Buffer,
   period: string,
   userExchangeRate: number,
-  mode: 'detail' | 'summary' = 'summary',
+  mode: 'detail' | 'summary' = 'detail',
 ): Promise<ParsedTransaction[]> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const pdfParse = require('pdf-parse/lib/pdf-parse.js')
     const data = await pdfParse(buffer)
     const rawText: string = data.text
-    console.log('[Parser] Modo:', mode, '| Páginas:', data.numpages, '| Chars:', rawText.length)
+    console.log('[Parser] Páginas:', data.numpages, '| Chars:', rawText.length)
 
+    // Detectar período
     const detectedPeriod = detectPeriod(rawText)
     const effectivePeriod = period || detectedPeriod || ''
     if (!effectivePeriod) throw new Error('No se pudo detectar el período del informe')
     console.log('[Parser] Período:', effectivePeriod)
 
-    const pdfTC = detectTC(rawText)
-    const exchangeRate = userExchangeRate > 0 ? userExchangeRate : pdfTC
-    const periodDate = `${effectivePeriod}-01`
+    // Fecha = último día del mes
+    const periodDate = lastDayOfMonth(effectivePeriod)
+    console.log('[Parser] Fecha asignada:', periodDate)
 
     const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean)
 
-    const results = mode === 'detail'
-      ? parseDetail(lines, periodDate, exchangeRate)
-      : parseSummary(lines, periodDate, exchangeRate)
+    const ctx: ParserContext = {
+      lines,
+      periodDate,
+      period: effectivePeriod,
+      nextId: 1,
+    }
 
-    console.log('[Parser] Transacciones generadas:', results.length)
-    return results
+    // Parsear todas las secciones
+    const ordinaryExpenses = parseOrdinaryExpenses(ctx)
+    console.log('[Parser] Gastos ordinarios:', ordinaryExpenses.length)
+
+    const incomeDetails = parseIncomeDetails(ctx)
+    console.log('[Parser] Ingresos:', incomeDetails.length)
+
+    const extraordinary = parseExtraordinary(ctx)
+    console.log('[Parser] Gastos extraordinarios:', extraordinary.length)
+
+    const mlRetiros = parseMLRetiros(ctx)
+    console.log('[Parser] ML retiros:', mlRetiros.length)
+
+    const allResults = [...incomeDetails, ...ordinaryExpenses, ...extraordinary, ...mlRetiros]
+
+    // Re-numerar IDs
+    allResults.forEach((t, i) => { t.id = `pdf-${i + 1}` })
+
+    console.log('[Parser] Total transacciones:', allResults.length)
+    return allResults
   } catch (err) {
     console.error('[Parser] Error:', err)
     throw err
