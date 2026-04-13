@@ -4,6 +4,7 @@ import './globals.css'
 import { Navbar } from '@/components/Navbar'
 import { AIChat } from '@/components/AIChat'
 import { Toaster } from 'react-hot-toast'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -26,6 +27,7 @@ export default function RootLayout({
         </main>
         <AIChat />
         <Toaster position="top-right" />
+        <SpeedInsights />
       </body>
     </html>
   )
