@@ -193,7 +193,7 @@ export function PortfolioPerformanceChart({ positions }: Props) {
                 `$${Number(value).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
                 'Valor',
               ]}
-              labelFormatter={formatDateLabel}
+              labelFormatter={(label) => formatDateLabel(String(label))}
               contentStyle={{
                 backgroundColor: '#232a5c',
                 border: '1px solid #333b72',
