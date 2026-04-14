@@ -303,10 +303,11 @@ function parseOrdinaryExpenses(ctx: ParserContext): ParsedTransaction[] {
       if (!rawLine) continue
 
       const u = rawLine.toUpperCase()
-      // Ignorar headers de columna, subtotales, líneas de sección
+      // Ignorar headers de columna, subtotales, resúmenes y líneas de sección
       if (u.startsWith('SUBTOTAL') || u.startsWith('TOTAL') ||
+          u.startsWith('SALDO') || u.startsWith('GASTOS EXTRAORDINARIOS') ||
           u === sec.header || u.includes('INFORME') ||
-          /^(SADIA|GUEMES|PDA|ÑANCUL|EML|TOTAL)\s*$/i.test(u)) continue
+          /^(SADIA|GUEMES|PDA|ÑANCUL|EML|TOTAL|INGRESOS|GASTOS)\s*$/i.test(u)) continue
 
       // Limpiar y extraer números
       const cleanLine = stripPercentages(stripDates(rawLine))
@@ -486,7 +487,9 @@ function parseIncomeDetails(ctx: ParserContext): ParsedTransaction[] {
     /DETALLE\s+INGRESOS/i.test(l)
   )
   if (incomeStart < 0) {
-    console.log('[Parser] No se encontró sección DETALLE INGRESOS')
+    // Nuevo formato: no hay sección DETALLE INGRESOS — usar fallback directo
+    console.log('[Parser] No se encontró sección DETALLE INGRESOS, usando fallback tabla resumen')
+    parseIncomeFromSummaryTable(ctx, results)
     return results
   }
 
@@ -624,22 +627,48 @@ function parseIncomeDetails(ctx: ParserContext): ParsedTransaction[] {
   return results
 }
 
-/** Fallback: extrae ingresos de la tabla resumen (Pág 6) */
+/**
+ * Extrae ingresos de la tabla resumen del informe.
+ * Soporta tanto el formato viejo (INGRESOS ALQUILERES) como el nuevo
+ * (Ingresos Alquileres, Depositos de Garantia, Otros Ingresos).
+ * Para el nuevo formato multi-columna, cada celda con monto > 0 = una transacción.
+ */
 function parseIncomeFromSummaryTable(ctx: ParserContext, results: ParsedTransaction[]): void {
   const { lines } = ctx
+
+  // Patrones de filas de ingreso y su empresa/categoría por columna
+  // Formato nuevo: el monto de CADA empresa está en una posición fija de la fila
+  // Como pdf-parse extrae el texto linearmente, usamos los números disponibles y detectamos empresa
+  const INCOME_ROWS = [
+    { pattern: /INGRESOS?\s*ALQUILERES/i, catKey: 'ALQUILERES', defaultCo: COMPANIES[0] },
+    { pattern: /INGRESOS?\s*PDA/i,        catKey: 'OTROS_INGRESOS', defaultCo: COMPANIES[2] },
+    { pattern: /INGRESOS?\s*[ÑN]ANCUL/i, catKey: 'OTROS_INGRESOS', defaultCo: COMPANIES[3] },
+    { pattern: /DEPOSITOS?\s*DE\s*GARANT/i, catKey: 'OTROS_INGRESOS', defaultCo: COMPANIES[1] },
+    { pattern: /OTROS\s*INGRESOS/i,       catKey: 'OTROS_INGRESOS', defaultCo: COMPANIES[4] },
+    { pattern: /APORTE\s*A\s*BANCO/i,     catKey: 'OTROS_INGRESOS', defaultCo: COMPANIES[0] },
+    { pattern: /APORTE\s*A\s*CAJA/i,      catKey: 'OTROS_INGRESOS', defaultCo: COMPANIES[0] },
+  ]
+
   for (const line of lines) {
     const u = line.toUpperCase()
-    if (u.includes('INGRESOS ALQUILERES') || u.includes('INGRESOS PDA') ||
-        u.includes('INGRESOS ÑANCUL') || u.includes('INGRESOS NANCUL')) {
+
+    // Saltar líneas de total/subtotal
+    if (u.startsWith('TOTAL') || u.startsWith('SUBTOTAL') || u.startsWith('SALDO')) continue
+
+    for (const row of INCOME_ROWS) {
+      if (!row.pattern.test(u)) continue
+
       const nums = extractNums(stripPercentages(line))
-      if (!nums.length) continue
-      const amount = nums[nums.length - 1] // total
-      if (amount <= 0) continue
+      if (!nums.length) break
+
+      // El último número es el total de la fila — lo usamos como monto
+      const amount = nums[nums.length - 1]
+      if (amount <= 0) break
 
       const firstDigit = line.search(/\d/)
       const concept = firstDigit > 0 ? line.slice(0, firstDigit).trim() : line.trim()
-      const co = detectCompany(concept)
-      const cat = incomeCategory(concept)
+      const cat = CATEGORY_MAP[row.catKey]
+      const co = row.defaultCo
 
       results.push(mkTx(ctx, {
         description: concept,
@@ -650,17 +679,80 @@ function parseIncomeFromSummaryTable(ctx: ParserContext, results: ParsedTransact
         businessName: co.dbName,
         categoryName: cat.name,
         expenseType: 'ordinario',
+        accountId: 1,
+        accountName: 'Cuenta corriente',
       }))
+      break
     }
   }
+  console.log('[Parser] Ingresos desde tabla resumen:', results.length)
 }
 
-// ─── 3. GASTOS EXTRAORDINARIOS (Pág 10-11) ──────────────────────────────────
+// ─── 3. GASTOS EXTRAORDINARIOS ───────────────────────────────────────────────
 
+/**
+ * Parsea gastos extraordinarios.
+ * Nuevo formato (2026): solo hay una fila de subtotal por empresa.
+ *   "Subtotal Gastos extraordinarios: 9.326.171 1.151.921 354.922 4.130.162 21.664.746 36.627.921"
+ * Formato viejo (2024): secciones detalladas "SADIA - GASTOS EXTRAORDINARIOS".
+ */
 function parseExtraordinary(ctx: ParserContext): ParsedTransaction[] {
   const results: ParsedTransaction[] = []
   const { lines } = ctx
 
+  // ── Nuevo formato: leer desde la fila subtotal ──────────────────────────────
+  const subtotalLine = lines.find(l =>
+    /SUBTOTAL\s+GASTOS\s+EXTRAORDINARIOS/i.test(l) ||
+    /SUBTOTAL\s+GASTOS\s+EXTRA/i.test(l)
+  )
+
+  if (subtotalLine) {
+    // Extraer los 5 valores por empresa (ignorar total al final)
+    const nums = extractNums(stripPercentages(subtotalLine))
+    // nums esperados: [SADIA, GUEMES, PDA, ÑANCUL, EML, Total] o subconjunto sin ceros
+    // Descartamos el último (total) y asignamos a empresas con montos > 0
+    const companyNums = nums.slice(0, -1) // quitar total
+    const total = nums[nums.length - 1]
+
+    // Intentar mapeo directo si tenemos exactamente 5 valores
+    if (companyNums.length === 5) {
+      COMPANIES.forEach((co, i) => {
+        const amount = companyNums[i]
+        if (amount <= 0) return
+        results.push(mkTx(ctx, {
+          description: 'Gastos Extraordinarios',
+          notes: `${co.key} | Extraordinarios`,
+          type: 'expense',
+          amount,
+          businessId: co.id,
+          businessName: co.dbName,
+          categoryName: 'Otros',
+          expenseType: 'extraordinario',
+          accountId: 1,
+          accountName: 'Cuenta corriente',
+        }))
+      })
+    } else if (companyNums.length > 0 && total > 0) {
+      // Menos de 5 valores → crear una transacción con el total
+      results.push(mkTx(ctx, {
+        description: 'Gastos Extraordinarios',
+        notes: 'MULTI-EMPRESA | Extraordinarios',
+        type: 'expense',
+        amount: total,
+        businessId: COMPANIES[0].id,
+        businessName: COMPANIES[0].dbName,
+        categoryName: 'Otros',
+        expenseType: 'extraordinario',
+        accountId: 1,
+        accountName: 'Cuenta corriente',
+      }))
+    }
+
+    console.log('[Parser] Extraordinarios (nuevo formato):', results.length)
+    return results
+  }
+
+  // ── Formato viejo: secciones detalladas por empresa ─────────────────────────
   const EXTRA_SECTIONS = [
     { re: /^SADIA\s*[-–]\s*GASTOS EXTRAORDINARIOS/i,              company: COMPANIES[0] },
     { re: /^GUEMES\s*[-–]\s*GASTOS EXTRAORDINARIOS/i,             company: COMPANIES[1] },
@@ -668,29 +760,22 @@ function parseExtraordinary(ctx: ParserContext): ParsedTransaction[] {
     { re: /^(?:ÑANCUL|NANCUL)\s*[-–]\s*GASTOS EXTRAORDINARIOS/i,  company: COMPANIES[3] },
     { re: /^EML\s*[-–]\s*GASTOS EXTRAORDINARIOS/i,                company: COMPANIES[4] },
   ]
-
   const SECTION_END_RE = /^(?:SADIA|GUEMES|PDA|ÑANCUL|NANCUL|EML|ML)\s*[-–]\s*(GASTOS|DETALLE|TOTAL)/i
 
   for (const { re, company } of EXTRA_SECTIONS) {
     const startIdx = lines.findIndex(l => re.test(l.trim()))
     if (startIdx < 0) continue
 
-    // Buscar fin de sección
     let endIdx = lines.length
     for (let i = startIdx + 1; i < lines.length; i++) {
       const trimmed = lines[i].trim()
-      if (SECTION_END_RE.test(trimmed) && !re.test(trimmed)) {
-        endIdx = i
-        break
-      }
+      if (SECTION_END_RE.test(trimmed) && !re.test(trimmed)) { endIdx = i; break }
     }
 
-    // Parsear líneas con fecha
     for (let i = startIdx + 1; i < endIdx; i++) {
       const line = lines[i].trim()
       if (!line) continue
 
-      // Detectar línea de fecha: dd/mm/yyyy CONCEPTO ... MONTO MEDIO_PAGO
       const dateMatch = line.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s+(.+)/)
       if (!dateMatch) continue
       const date = parseDate(dateMatch[1])
@@ -699,34 +784,26 @@ function parseExtraordinary(ctx: ParserContext): ParsedTransaction[] {
       const rest = dateMatch[2]
       if (/TOTAL/i.test(rest)) continue
 
-      // Extraer números del resto
       const nums = extractNums(rest)
       if (!nums.length) continue
 
-      // Concepto = texto antes del primer número
       const firstDigit = rest.search(/\d/)
-      let concept = firstDigit > 0 ? rest.slice(0, firstDigit).trim() : rest.trim()
+      const concept = firstDigit > 0 ? rest.slice(0, firstDigit).trim() : rest.trim()
       if (!concept || concept.length < 2) continue
 
-      // Detectar USD
       const usdMatch = rest.match(/USD\s*([\d.,]+)\s+([\d.,]+)/i)
       let amount: number
-      let currency: 'ARS' | 'USD' = 'ARS'
-
       if (usdMatch) {
         const usdAmt = parseArgNumber(usdMatch[1])
         const tc = parseArgNumber(usdMatch[2])
-        // Buscar el monto ARS después del TC
         const afterUsd = rest.slice(rest.indexOf(usdMatch[0]) + usdMatch[0].length)
         const arsNums = extractNums(afterUsd)
         amount = arsNums.length > 0 ? arsNums[0] : (tc > 0 ? usdAmt * tc : usdAmt)
-        currency = 'ARS' // Guardamos siempre en ARS
       } else {
-        amount = nums[0] // Primer número grande
+        amount = nums[0]
       }
       if (amount <= 0) continue
 
-      // Medio de pago = último token de texto
       const tokens = rest.split(/\s{2,}/)
       const lastToken = tokens[tokens.length - 1]?.trim() ?? ''
       const medioPago = /[A-Z]{2,}/.test(lastToken) ? lastToken : ''
@@ -748,6 +825,7 @@ function parseExtraordinary(ctx: ParserContext): ParsedTransaction[] {
     }
   }
 
+  console.log('[Parser] Extraordinarios (formato viejo):', results.length)
   return results
 }
 
