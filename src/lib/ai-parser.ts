@@ -61,10 +61,11 @@ export async function parseDocumentWithClaude(
       ? 'MODO RESUMEN: Extraé únicamente los subtotales por categoría y empresa. No extraigas líneas individuales. Si hay SUBTOTAL PROVEEDORES, SUBTOTAL SUELDOS, etc., usá esos valores.'
       : 'MODO DETALLADO: Extraé cada transacción individual. Si hay una tabla con filas de sueldos, proveedores, servicios, etc., creá una fila por cada concepto individual.'
 
-  const systemPrompt = `Sos un asistente especializado en procesar documentos financieros para Grupo Lubrano, un family office argentino. Tu única tarea en este mensaje es extraer transacciones del documento y devolver un JSON válido.
+  const systemPrompt = `Sos un asistente especializado en procesar documentos financieros para Grupo Lubrano, un family office argentino. Tu única tarea es extraer transacciones del documento y devolver un JSON válido.
 
-EMPRESAS DEL GRUPO:
+EMPRESAS DEL GRUPO (columnas del informe):
 ${businessList}
+• GUEMES en el documento = Promenade (id: 3) — siempre mapear así
 
 CATEGORÍAS DE INGRESOS DISPONIBLES:
 ${incomeCategories}
@@ -72,50 +73,94 @@ ${incomeCategories}
 CATEGORÍAS DE GASTOS DISPONIBLES:
 ${expenseCategories}
 
-CUENTAS DISPONIBLES:
-• Cuenta corriente (id: 1)
-• Caja de ahorro (id: 2)
-• Efectivo (id: 3)
+CUENTA POR DEFECTO: Cuenta corriente (id: 1, name: "Cuenta corriente") — usar para todas las transacciones.
 
-REGLAS DE EXTRACCIÓN:
-1. Números argentinos: punto = miles, coma = decimal. Ej: "1.445.170" → 1445170 | "1.234,56" → 1234.56
-2. Si el monto menciona "USD", "U$S" o "DOLAR" → currency="USD", sino currency="ARS"
-3. type: "income" para ingresos/entradas, "expense" para gastos/egresos/salidas
-4. expenseType: "ordinario" para gastos recurrentes (sueldos, servicios, alquileres) | "extraordinario" para gastos no recurrentes, ventas de activos, inversiones
-4.1. 🔴 CRÍTICO - Omisión de filas sin monto:
-  - Si una fila tiene descripción pero NO tiene monto (vacío/borroso/ilegible):
-    → NO inventes monto
-    → NO incluyas en el JSON de respuesta
-    → Silenciosamente omitida
-  - Solo incluír transacciones con monto ≥ 0.01 claramente visible en el documento
-5. Ignorá filas que sean:
-  - TOTALES GENERALES, SALDO GENERAL, SUBTOTALES (sumas de otras filas)
-  - ENCABEZADOS o TÍTULOS DE SECCIÓN (sin monto real)
-  - Descripción SIN monto visible = OMITIR completamente, NO inventés montos
-6. Si no encontrás la empresa en el concepto, usá el businessId más apropiado según el contexto
-7. Para la categoría: usá el id y name de las listas de arriba. Si no hay match claro, dejá categoryId null y categoryName null
-8. exchangeRate: si el documento tiene "TIPO CAMBIO: X" usá ese valor. Sino usá ${exchangeRate}
+═══════════════════════════════════════════════════
+FORMATO ESPECIAL: INFORME GRUPO LUBRANO (tabla multi-columna)
+═══════════════════════════════════════════════════
+
+El documento es una tabla con columnas: CONCEPTO | SADIA | GUEMES | PDA | ÑANCUL | EML | TOTAL
+
+REGLA FUNDAMENTAL — UNA TRANSACCIÓN POR CELDA:
+- Cada fila puede tener montos en VARIAS columnas de empresa simultáneamente
+- Cada celda con monto > 0 = UNA transacción separada
+- Ejemplo: "OSDE DIRECTORIO | SADIA: 1.010.725 | EML: 1.302.864"
+  → Transacción 1: businessId=1 (Sadia), amount=1010725
+  → Transacción 2: businessId=4 (EML), amount=1302864
+- NUNCA usar la columna TOTAL como monto de una transacción
+- NUNCA combinar montos de distintas empresas en una sola transacción
+
+MAPEO DE COLUMNAS A EMPRESAS:
+- Columna SADIA   → businessId=1, businessName="Sadia"
+- Columna GUEMES  → businessId=3, businessName="Promenade"
+- Columna PDA     → businessId=5, businessName="PDA"
+- Columna ÑANCUL  → businessId=2, businessName="Ñancul"
+- Columna EML     → businessId=4, businessName="EML"
+
+MAPEO DE SECCIONES A CATEGORÍAS:
+Usá el nombre de la sección del informe como categoryName. Buscá el id que mejor coincida en las listas de arriba:
+- Sección "PROVEEDORES" → buscar categoría "Proveedores" o similar
+- Sección "SUELDOS" / "SUELDOS Y CARGAS SOCIALES" → buscar "Sueldos" o similar
+- Sección "SERVICIOS" → buscar "Servicios" o similar
+- Sección "PLANES FINANCIACION" → buscar "Planes" o similar
+- Sección "IMPUESTOS" → buscar "Impuestos" o similar
+- Sección "SEGUROS" → buscar "Seguros" o similar
+- Sección "VARIOS" → buscar "Varios" o similar
+- Sección "INGRESOS" → usar categoría de ingresos correspondiente
+- Si no encontrás match exacto: categoryId=null, categoryName="[nombre de sección]"
+
+GASTOS EXTRAORDINARIOS:
+- Al final del documento puede haber una sección "GASTOS EXTRAORDINARIOS" con subtotales por empresa
+- Importar cada celda con monto > 0 como una transacción con:
+  - description: "Gastos Extraordinarios"
+  - expenseType: "extraordinario"
+  - categoryName según la categoría más apropiada de la lista
+
+INGRESOS:
+- Sección "INGRESOS" al inicio del documento: extraer cada fila con monto > 0
+- type: "income"
+- ivaRate: null siempre para ingresos
+
+═══════════════════════════════════════════════════
+REGLAS GENERALES
+═══════════════════════════════════════════════════
+
+1. NÚMEROS: formato argentino — punto=miles, coma=decimal
+   Ej: "1.445.170" → 1445170 | "1.234,56" → 1234.56
+
+2. 🔴 CRÍTICO — MONTOS PROHIBIDOS:
+   - Si una celda está vacía, en blanco o es 0 → NO crear transacción
+   - NUNCA inventar montos
+   - NUNCA usar la columna TOTAL como monto
+   - Solo incluir transacciones con monto ≥ 1 (claramente visible en el documento)
+
+3. OMITIR completamente:
+   - Filas de SUBTOTALES (Subtotal Proveedores, Subtotal Sueldos, etc.)
+   - Filas de TOTALES GENERALES (Total Ingresos, Total Gastos, Saldo Neto, etc.)
+   - Filas con monto = 0 en todas las columnas
+   - Títulos de sección sin monto
+
+4. FECHAS: usar el último día del mes del período. Ej: período 2026-01 → "2026-01-31"
+
+5. currency: "ARS" siempre salvo que el concepto mencione explícitamente USD/U$S/DOLAR
+
+6. expenseType:
+   - "ordinario" para gastos corrientes (sueldos, servicios, proveedores, seguros, impuestos)
+   - "extraordinario" solo para la sección "GASTOS EXTRAORDINARIOS"
+
+7. ivaRate: null para todos (este tipo de informe no desglosa IVA por línea)
+
+8. accountId: 1 (Cuenta corriente) para todas las transacciones
+
 9. ${modeInstructions}
-10. Todas las fechas en formato YYYY-MM-DD. Si solo conocés el mes, usá el último día del mes
-11. ivaRate: detectar tasa de IVA aplicable al gasto. Solo para gastos (expenses):
-    - Si la descripción menciona "IVA 21%", "21%", o es un servicio típico → ivaRate: 21
-    - Si menciona "IVA 10.5%", "10,5%" → ivaRate: 10.5
-    - Si es sueldo, retiro, transferencia interna o sin IVA → ivaRate: null
-    - Para ingresos: siempre ivaRate: null
-12. accountId: detectar la cuenta desde el medio de pago:
-    - "EFVO", "Efectivo", "Caja", "Cash" → accountId: 3 (Efectivo)
-    - "CC", "Cuenta corriente", "Transferencia", "Banco", "Débito", "Tarjeta" → accountId: 1 (Cuenta corriente)
-    - "CA", "Caja de ahorro" → accountId: 2 (Caja de ahorro)
-    - Sin información de medio de pago → accountId: null
 
-FORMATO DE RESPUESTA:
-Devolvé SOLAMENTE el JSON, sin texto previo ni posterior, sin markdown, sin bloques de código:
+FORMATO DE RESPUESTA — SOLO JSON, sin markdown, sin texto adicional:
 {
   "transactions": [
     {
       "date": "YYYY-MM-DD",
-      "description": "Concepto claro y descriptivo",
-      "notes": "Info adicional, método de pago, etc.",
+      "description": "Concepto claro",
+      "notes": "",
       "type": "income" | "expense",
       "amount": 1234567.89,
       "businessId": 1,
@@ -124,25 +169,23 @@ Devolvé SOLAMENTE el JSON, sin texto previo ni posterior, sin markdown, sin blo
       "categoryName": "Sueldos y Cargas Sociales",
       "expenseType": "ordinario",
       "currency": "ARS",
-      "exchangeRate": 1030,
-      "ivaRate": 21,
+      "exchangeRate": ${exchangeRate},
+      "ivaRate": null,
       "accountId": 1,
       "accountName": "Cuenta corriente"
     }
   ],
   "detectedPeriod": "YYYY-MM",
-  "detectedExchangeRate": 1030,
-  "notes": "Observaciones sobre el documento o problemas encontrados"
-}
-
-NOTA CRÍTICA: Si una fila tiene descripción pero no tiene monto (vacío, borroso, ilegible):
-- NO la incluyas en el array "transactions"
-- No devuelvas "amount": 0 ni "amount": null
-- Omitida silenciosamente del resultado
-- Podés mencionar en "notes" si hubo filas omitidas por falta de monto`
+  "detectedExchangeRate": null,
+  "notes": "Observaciones"
+}`
 
   const userPrompt = `Período de referencia: ${period}
 Tipo de cambio configurado: ${exchangeRate} ARS/USD
+
+INSTRUCCIÓN CLAVE: Este documento es una tabla multi-columna con empresas (SADIA, GUEMES, PDA, ÑANCUL, EML).
+Cada fila puede tener montos en múltiples columnas → generá UNA transacción por cada celda con monto > 0.
+GUEMES = Promenade (id: 3). NO uses la columna TOTAL. Omitir filas con monto = 0.
 
 DOCUMENTO:
 ${documentText}`
