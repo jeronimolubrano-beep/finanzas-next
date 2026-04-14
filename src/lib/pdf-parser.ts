@@ -104,8 +104,19 @@ function parseDate(s: string): string {
   return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
 }
 
-/** Detecta el período del informe: "INFORME OCTUBRE 2024" → "2024-10" */
+/** Detecta el período del informe.
+ * Soporta dos formatos:
+ *   - Nuevo: "INFORME 01/2026" → "2026-01"
+ *   - Viejo: "INFORME OCTUBRE 2024" → "2024-10"
+ */
 function detectPeriod(text: string): string | null {
+  // Nuevo formato numérico: "INFORME 01/2026"
+  const numericMatch = text.match(/INFORME\s+(\d{2})\/(\d{4})/i)
+  if (numericMatch) {
+    return `${numericMatch[2]}-${numericMatch[1]}`
+  }
+
+  // Formato clásico con mes en letras: "INFORME OCTUBRE 2024"
   const MONTHS: Record<string, string> = {
     ENERO: '01', FEBRERO: '02', MARZO: '03', ABRIL: '04', MAYO: '05', JUNIO: '06',
     JULIO: '07', AGOSTO: '08', SEPTIEMBRE: '09', SEPT: '09',
@@ -225,8 +236,12 @@ function parseOrdinaryExpenses(ctx: ParserContext): ParsedTransaction[] {
   const results: ParsedTransaction[] = []
   const { lines } = ctx
 
-  // Buscar el inicio de la tabla detallada: "INFORME [MES]`[AÑO]" con columnas empresa
+  // Buscar el inicio de la tabla detallada con columnas de empresa.
+  // Soporta dos formatos:
+  //   Nuevo: "INFORME 01/2026 SADIA GUEMES ..."
+  //   Viejo: "INFORME OCTUBRE 2024 SADIA ..."
   const detailStart = lines.findIndex(l =>
+    /INFORME\s+\d{2}\/\d{4}\s+SADIA/i.test(l) ||
     /INFORME\s+[A-ZÁÉÍÓÚÑ]+[`´'\s]*\d{2,4}\s+SADIA/i.test(l)
   )
   if (detailStart < 0) {
