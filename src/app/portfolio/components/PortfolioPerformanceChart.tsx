@@ -189,8 +189,8 @@ export function PortfolioPerformanceChart({ positions }: Props) {
               width={60}
             />
             <Tooltip
-              formatter={(value: number) => [
-                `$${value.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+              formatter={(value) => [
+                `$${Number(value).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
                 'Valor',
               ]}
               labelFormatter={formatDateLabel}
