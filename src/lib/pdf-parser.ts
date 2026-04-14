@@ -237,22 +237,23 @@ function parseOrdinaryExpenses(ctx: ParserContext): ParsedTransaction[] {
   const { lines } = ctx
 
   // Buscar el inicio de la tabla detallada con columnas de empresa.
-  // Soporta dos formatos:
-  //   Nuevo: "INFORME 01/2026 SADIA GUEMES ..."
-  //   Viejo: "INFORME OCTUBRE 2024 SADIA ..."
+  // Soporta: "INFORME 01/2026 SADIA ...", "INFORME OCTUBRE 2024 SADIA ...",
+  //          o header partido en varias líneas (xlsx-PDF).
+  // Si no se encuentra, se busca desde el principio del documento.
   const detailStart = lines.findIndex(l =>
-    /INFORME\s+\d{2}\/\d{4}\s+SADIA/i.test(l) ||
-    /INFORME\s+[A-ZÁÉÍÓÚÑ]+[`´'\s]*\d{2,4}\s+SADIA/i.test(l)
+    /INFORME\s+\d{1,2}\/\d{4}/i.test(l) ||
+    /INFORME\s+\d{2}\/\d{4}\s*SADIA/i.test(l) ||
+    /INFORME\s+[A-ZÁÉÍÓÚÑ]+[`´'\s]*\d{2,4}\s*SADIA/i.test(l) ||
+    /^SADIA\s+(GUEMES|PDA|EML|ÑANCUL)/i.test(l)
   )
-  if (detailStart < 0) {
-    console.log('[Parser] No se encontró tabla detallada de gastos ordinarios')
-    return results
-  }
+  const searchFrom = Math.max(0, detailStart) // nunca bloquear por falta de header
+  console.log('[Parser] detailStart:', detailStart, '→ searchFrom:', searchFrom)
+  console.log('[Parser] Primeras 20 líneas del PDF:', lines.slice(0, 20))
 
   for (const sec of EXPENSE_SECTIONS) {
-    // Buscar Subtotal de esta sección (después del detailStart)
+    // Buscar Subtotal de esta sección (después de searchFrom)
     const subtotalIdx = lines.findIndex((l, i) => {
-      if (i <= detailStart) return false
+      if (i <= searchFrom) return false
       const u = l.toUpperCase()
       return u.includes('SUBTOTAL') && u.includes(sec.subtotalKey)
     })
@@ -285,7 +286,7 @@ function parseOrdinaryExpenses(ctx: ParserContext): ParsedTransaction[] {
 
     // Buscar header de la sección (antes del subtotal)
     let headerIdx = -1
-    for (let i = subtotalIdx - 1; i >= Math.max(detailStart, subtotalIdx - 100); i--) {
+    for (let i = subtotalIdx - 1; i >= Math.max(searchFrom, subtotalIdx - 100); i--) {
       const u = lines[i].toUpperCase().trim()
       if (u === sec.header || u.startsWith(sec.header + ' ') || u.startsWith(sec.header + '\t')) {
         headerIdx = i
