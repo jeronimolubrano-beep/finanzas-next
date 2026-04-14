@@ -1,86 +1,80 @@
-// Token store en memoria del servidor para sesiones IOL
-// Los tokens NUNCA se persisten en base de datos — solo viven en RAM
+/**
+ * IOL Session — cookie-based token storage
+ *
+ * Stores the IOL token directly in httpOnly cookies so it survives across
+ * Vercel serverless function instances (in-memory Map doesn't work there).
+ */
 
-import type { IOLToken } from './iol-types'
 import { iolRefresh } from './iol-client'
+import type { NextRequest, NextResponse } from 'next/server'
 
-interface StoredSession {
-  token: IOLToken
-  expiresAt: number // timestamp ms
+export const COOKIE_ACCESS  = 'iol_access_token'
+export const COOKIE_REFRESH = 'iol_refresh_token'
+export const COOKIE_EXPIRES = 'iol_token_expires'
+export const COOKIE_LOGGED  = 'iol_logged_in'
+
+const BASE_OPTS = {
+  sameSite: 'strict' as const,
+  path: '/',
+  secure: process.env.NODE_ENV === 'production',
 }
 
-const sessions = new Map<string, StoredSession>()
+const MAX_AGE = 60 * 60 * 8 // 8 hours
 
-// Limpiar sesiones expiradas cada 5 minutos
-if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    const now = Date.now()
-    for (const [id, session] of sessions) {
-      if (session.expiresAt < now) {
-        sessions.delete(id)
-      }
-    }
-  }, 5 * 60 * 1000)
-}
-
-export function storeToken(sessionId: string, token: IOLToken): void {
-  sessions.set(sessionId, {
-    token,
-    expiresAt: Date.now() + token.expires_in * 1000,
-  })
-}
-
-export function getToken(sessionId: string): IOLToken | null {
-  const session = sessions.get(sessionId)
-  if (!session) return null
-  if (session.expiresAt < Date.now()) {
-    sessions.delete(sessionId)
-    return null
-  }
-  return session.token
-}
-
-export function isAuthenticated(sessionId: string): boolean {
-  return getToken(sessionId) !== null
-}
-
-export function removeToken(sessionId: string): void {
-  sessions.delete(sessionId)
+/**
+ * Sets all token cookies on a NextResponse.
+ */
+export function setTokenCookies(
+  response: NextResponse,
+  accessToken: string,
+  refreshToken: string,
+  expiresIn: number,
+) {
+  const expiresAt = Date.now() + expiresIn * 1000
+  response.cookies.set(COOKIE_ACCESS,  accessToken,        { ...BASE_OPTS, httpOnly: true,  maxAge: MAX_AGE })
+  response.cookies.set(COOKIE_REFRESH, refreshToken,       { ...BASE_OPTS, httpOnly: true,  maxAge: MAX_AGE })
+  response.cookies.set(COOKIE_EXPIRES, String(expiresAt),  { ...BASE_OPTS, httpOnly: true,  maxAge: MAX_AGE })
+  response.cookies.set(COOKIE_LOGGED,  '1',                { ...BASE_OPTS, httpOnly: false, maxAge: MAX_AGE })
 }
 
 /**
- * Renueva el token si queda menos de 2 minutos para que expire.
- * Retorna el access_token actual (renovado o no), o null si falló.
+ * Clears all token cookies on a NextResponse.
  */
-export async function refreshIfNeeded(sessionId: string): Promise<string | null> {
-  const session = sessions.get(sessionId)
-  if (!session) return null
+export function clearTokenCookies(response: NextResponse) {
+  response.cookies.set(COOKIE_ACCESS,  '', { ...BASE_OPTS, httpOnly: true,  maxAge: 0 })
+  response.cookies.set(COOKIE_REFRESH, '', { ...BASE_OPTS, httpOnly: true,  maxAge: 0 })
+  response.cookies.set(COOKIE_EXPIRES, '', { ...BASE_OPTS, httpOnly: true,  maxAge: 0 })
+  response.cookies.set(COOKIE_LOGGED,  '', { ...BASE_OPTS, httpOnly: false, maxAge: 0 })
+}
 
-  const timeLeft = session.expiresAt - Date.now()
+/**
+ * Reads the access token from the request cookies.
+ * If it's about to expire, refreshes it and writes new cookies to the response.
+ * Returns the valid access token, or null if not authenticated.
+ */
+export async function getAccessToken(
+  request: NextRequest,
+  response: NextResponse,
+): Promise<string | null> {
+  const access  = request.cookies.get(COOKIE_ACCESS)?.value
+  const refresh = request.cookies.get(COOKIE_REFRESH)?.value
+  const expires = request.cookies.get(COOKIE_EXPIRES)?.value
 
-  // Si queda más de 2 min, usar el token actual
-  if (timeLeft > 2 * 60 * 1000) {
-    return session.token.access_token
-  }
+  if (!access || !refresh || !expires) return null
 
-  // Intentar renovar
+  const expiresAt = Number(expires)
+  const twoMinFromNow = Date.now() + 2 * 60 * 1000
+
+  // Token still valid
+  if (expiresAt > twoMinFromNow) return access
+
+  // Token expiring soon → refresh
   try {
-    const newToken = await iolRefresh(session.token.refresh_token)
-    storeToken(sessionId, newToken)
+    const newToken = await iolRefresh(refresh)
+    setTokenCookies(response, newToken.access_token, newToken.refresh_token, newToken.expires_in)
     return newToken.access_token
   } catch {
-    // Refresh falló — eliminar sesión
-    sessions.delete(sessionId)
+    clearTokenCookies(response)
     return null
   }
-}
-
-/**
- * Obtiene el access_token listo para usar (refrescando si es necesario).
- * Retorna null si no hay sesión o la renovación falló.
- */
-export async function getAccessToken(sessionId: string): Promise<string | null> {
-  const token = getToken(sessionId)
-  if (!token) return null
-  return refreshIfNeeded(sessionId)
 }

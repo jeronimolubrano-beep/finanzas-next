@@ -6,14 +6,11 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 15
 
 export async function GET(request: NextRequest) {
-  const sessionId = request.cookies.get('iol_session')?.value
-  if (!sessionId) {
-    return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
-  }
+  const response = NextResponse.json({})
+  const accessToken = await getAccessToken(request, response)
 
-  const accessToken = await getAccessToken(sessionId)
   if (!accessToken) {
-    return NextResponse.json({ error: 'Sesión expirada' }, { status: 401 })
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
   }
 
   const params = request.nextUrl.searchParams
@@ -31,7 +28,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const serie = await getSerieHistorica(accessToken, mercado, simbolo, from, to)
-    return NextResponse.json(serie)
+    const res = NextResponse.json(serie)
+    response.cookies.getAll().forEach(c => res.cookies.set(c.name, c.value))
+    return res
   } catch (error: unknown) {
     const status = (error as { status?: number }).status || 500
     const message = error instanceof Error ? error.message : 'Error al obtener serie histórica'

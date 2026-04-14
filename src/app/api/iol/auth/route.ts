@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { iolLogin } from '@/lib/iol-client'
-import { storeToken } from '@/lib/iol-session'
+import { setTokenCookies } from '@/lib/iol-session'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,26 +16,9 @@ export async function POST(request: NextRequest) {
     }
 
     const token = await iolLogin(username, password)
-    const sessionId = crypto.randomUUID()
-
-    storeToken(sessionId, token)
 
     const response = NextResponse.json({ ok: true })
-
-    response.cookies.set('iol_session', sessionId, {
-      httpOnly: true,
-      sameSite: 'strict',
-      path: '/api/iol',
-      maxAge: 3600, // 1 hora max, token real dura 15 min
-    })
-
-    // También seteamos una cookie legible por el client para saber si está logueado
-    response.cookies.set('iol_logged_in', '1', {
-      httpOnly: false,
-      sameSite: 'strict',
-      path: '/',
-      maxAge: 3600,
-    })
+    setTokenCookies(response, token.access_token, token.refresh_token, token.expires_in)
 
     return response
   } catch (error: unknown) {
