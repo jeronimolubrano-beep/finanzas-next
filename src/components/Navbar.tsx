@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   LayoutDashboard, ArrowLeftRight, PlusCircle, List,
   BarChart3, FileText, Settings, Tag, DollarSign, Menu, X, Camera, FileUp,
-  Bell, Clock, AlertTriangle, LogOut, Sparkles,
+  Bell, Clock, AlertTriangle, LogOut, Sparkles, Briefcase,
   type LucideIcon
 } from 'lucide-react'
 import { formatMoney, formatDateShort } from '@/lib/utils'
@@ -23,6 +23,7 @@ function isLink(item: NavItem): item is NavLink {
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/transactions/pending', label: 'Pendientes', icon: Clock },
+  { href: '/portfolio', label: 'Cartera', icon: Briefcase },
   { href: '/ai', label: 'Consultas IA', icon: Sparkles },
   {
     label: 'Transacciones',
