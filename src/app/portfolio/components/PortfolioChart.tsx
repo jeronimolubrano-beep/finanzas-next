@@ -54,8 +54,8 @@ export function PortfolioChart({ groups }: Props) {
                 ))}
               </Pie>
               <Tooltip
-                formatter={(value: number) => [
-                  `$${value.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`,
+                formatter={(value) => [
+                  `$${Number(value).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`,
                   '',
                 ]}
                 contentStyle={{
