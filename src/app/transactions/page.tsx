@@ -106,6 +106,7 @@ export default async function TransactionsPage({
     if (params.month) p.set('month', params.month)
     if (params.business_id) p.set('business_id', params.business_id)
     if (params.status) p.set('status', params.status)
+    if (params.category_id) p.set('category_id', params.category_id)
     p.set('sort', sortParam)
     for (const [k, v] of Object.entries(overrides)) p.set(k, v)
     return `/transactions?${p.toString()}`
@@ -132,7 +133,8 @@ export default async function TransactionsPage({
       {/* Filtros */}
       <form className="rounded-xl border p-4 mb-6" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
         <input type="hidden" name="currency" value={showCurrency} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Fila 1 */}
           <div>
             <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Tipo</label>
             <select name="type" defaultValue={params.type ?? ''} className="w-full rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }}>
@@ -142,7 +144,7 @@ export default async function TransactionsPage({
             </select>
           </div>
           <div>
-            <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Categoría de gasto</label>
+            <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Tipo de gasto</label>
             <select name="expense_type" defaultValue={params.expense_type ?? ''} className="w-full rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }}>
               <option value="">Todos</option>
               <option value="ordinario">Ordinario</option>
@@ -160,12 +162,20 @@ export default async function TransactionsPage({
               {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
+          {/* Fila 2 */}
           <div>
             <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Estado</label>
             <select name="status" defaultValue={params.status ?? ''} className="w-full rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }}>
               <option value="">Todos</option>
               <option value="percibido">Cobrado / Pagado</option>
               <option value="devengado">Pendiente</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Categoría</label>
+            <select name="category_id" defaultValue={params.category_id ?? ''} className="w-full rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }}>
+              <option value="">Todas</option>
+              {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
