@@ -12,6 +12,7 @@ export default async function TransactionsPage({
 }: {
   searchParams: Promise<{
     type?: string
+    expense_type?: string
     month?: string
     business_id?: string
     status?: string
@@ -38,6 +39,9 @@ export default async function TransactionsPage({
 
   if (params.type && ['income', 'expense'].includes(params.type)) {
     query = query.eq('type', params.type)
+  }
+  if (params.expense_type && ['ordinario', 'extraordinario'].includes(params.expense_type)) {
+    query = query.eq('expense_type', params.expense_type)
   }
   if (params.month) {
     query = query.gte('date', `${params.month}-01`).lte('date', `${params.month}-31`)
@@ -98,6 +102,7 @@ export default async function TransactionsPage({
   function buildParams(overrides: Record<string, string>) {
     const p = new URLSearchParams()
     if (params.type) p.set('type', params.type)
+    if (params.expense_type) p.set('expense_type', params.expense_type)
     if (params.month) p.set('month', params.month)
     if (params.business_id) p.set('business_id', params.business_id)
     if (params.status) p.set('status', params.status)
@@ -127,13 +132,21 @@ export default async function TransactionsPage({
       {/* Filtros */}
       <form className="rounded-xl border p-4 mb-6" style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}>
         <input type="hidden" name="currency" value={showCurrency} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-7 gap-3">
           <div>
             <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Tipo</label>
             <select name="type" defaultValue={params.type ?? ''} className="w-full rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }}>
               <option value="">Todos</option>
               <option value="income">Ingreso</option>
               <option value="expense">Gasto</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium mb-1 block" style={{ color: '#8b8ec0' }}>Categoría de gasto</label>
+            <select name="expense_type" defaultValue={params.expense_type ?? ''} className="w-full rounded-lg px-3 py-1.5 text-sm border" style={{ borderColor: '#e8e8f0' }}>
+              <option value="">Todos</option>
+              <option value="ordinario">Ordinario</option>
+              <option value="extraordinario">Extraordinario</option>
             </select>
           </div>
           <div>
@@ -231,13 +244,23 @@ export default async function TransactionsPage({
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      t.type === 'income'
-                        ? 'text-[#2edbc1]'
-                        : 'text-[#fe4962]'
-                    }`} style={{ background: t.type === 'income' ? 'rgba(46,219,193,0.1)' : 'rgba(254,73,98,0.1)' }}>
-                      {t.type === 'income' ? 'Ingreso' : 'Gasto'}
-                    </span>
+                    <div className="flex flex-col items-center gap-1">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        t.type === 'income'
+                          ? 'text-[#2edbc1]'
+                          : 'text-[#fe4962]'
+                      }`} style={{ background: t.type === 'income' ? 'rgba(46,219,193,0.1)' : 'rgba(254,73,98,0.1)' }}>
+                        {t.type === 'income' ? 'Ingreso' : 'Gasto'}
+                      </span>
+                      {t.type === 'expense' && t.expense_type && (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{
+                          background: t.expense_type === 'extraordinario' ? 'rgba(100,57,255,0.1)' : 'rgba(139,142,192,0.1)',
+                          color: t.expense_type === 'extraordinario' ? '#6439ff' : '#8b8ec0'
+                        }}>
+                          {t.expense_type === 'extraordinario' ? 'Extraord.' : 'Ordinario'}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
