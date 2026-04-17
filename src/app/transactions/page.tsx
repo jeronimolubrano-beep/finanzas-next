@@ -3,6 +3,7 @@ import { formatMoney, statusLabel, dueDateUrgency, daysUntilDue, formatDateAR, f
 import Link from 'next/link'
 import { PlusCircle, Pencil, Trash2 } from 'lucide-react'
 import { DeleteButton } from './DeleteButton'
+import { VerifyButton } from './VerifyButton'
 import { Suspense } from 'react'
 import { TCSelector } from '@/components/TCSelector'
 
@@ -110,14 +111,17 @@ export default async function TransactionsPage({
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold" style={{ color: 'var(--navy)' }}>Transacciones</h1>
-        <Link
-          href="/transactions/add"
-          className="flex items-center gap-2 text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition"
-          style={{ background: '#6439ff' }}
-        >
-          <PlusCircle className="w-4 h-4" />
-          Agregar
-        </Link>
+        <div className="flex items-center gap-2">
+          <VerifyButton month={params.month} />
+          <Link
+            href="/transactions/add"
+            className="flex items-center gap-2 text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition"
+            style={{ background: '#6439ff' }}
+          >
+            <PlusCircle className="w-4 h-4" />
+            Agregar
+          </Link>
+        </div>
       </div>
 
       {/* Filtros */}
