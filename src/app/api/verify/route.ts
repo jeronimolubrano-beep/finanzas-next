@@ -11,7 +11,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import * as XLSX from 'xlsx'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse')
+const pdfParse = require('pdf-parse/lib/pdf-parse.js')
 
 export const maxDuration = 60
 
