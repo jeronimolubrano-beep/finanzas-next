@@ -10,9 +10,6 @@ import { createClient } from '@/lib/supabase/server'
 import Anthropic from '@anthropic-ai/sdk'
 import * as XLSX from 'xlsx'
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse/lib/pdf-parse.js')
-
 export const maxDuration = 60
 
 const anthropic = new Anthropic()
@@ -72,6 +69,8 @@ export async function POST(request: NextRequest) {
     let rawText = ''
 
     if (ext === 'pdf') {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require('pdf-parse/lib/pdf-parse.js')
       const pdfData = await pdfParse(buffer)
       rawText = pdfData.text
     } else if (ext === 'xlsx' || ext === 'xls') {
