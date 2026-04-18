@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { PlusCircle, Pencil, Trash2 } from 'lucide-react'
 import { DeleteButton } from './DeleteButton'
 import { VerifyButton } from './VerifyButton'
+import { ExportButton } from './ExportButton'
 import { Suspense } from 'react'
 import { TCSelector } from '@/components/TCSelector'
 
@@ -118,6 +119,15 @@ export default async function TransactionsPage({
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold" style={{ color: 'var(--navy)' }}>Transacciones</h1>
         <div className="flex items-center gap-2">
+          <ExportButton params={{
+            type:         params.type,
+            expense_type: params.expense_type,
+            month:        params.month,
+            business_id:  params.business_id,
+            status:       params.status,
+            category_id:  params.category_id,
+            sort:         params.sort,
+          }} />
           <VerifyButton month={params.month} />
           <Link
             href="/transactions/add"
