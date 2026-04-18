@@ -76,13 +76,17 @@ function parseArgNumber(str: string): number {
 }
 
 /**
- * Extrae números en formato argentino de una línea.
- * Maneja números pegados que genera pdf-parse en tablas.
+ * Extrae montos en formato argentino de una línea.
+ * Acepta SOLO:
+ *   - Números con separador de miles (X.XXX, X.XXX.XXX, etc.)
+ *   - Números con coma decimal (XXX,XX)
+ * Rechaza dígitos sueltos / códigos alfanuméricos (ej: "U495455", "AF330HM",
+ * "Cta 09/24", patentes, número de factura, etc.) para evitar que se
+ * interpreten como monto.
  */
 function extractNums(line: string): number[] {
-  return (line.match(/\d{1,3}(?:\.\d{3})*(?:,\d+)?/g) ?? [])
-    .map(parseArgNumber)
-    .filter(n => n > 0)
+  const matches = line.match(/\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+,\d{2}/g) ?? []
+  return matches.map(parseArgNumber).filter(n => n > 0)
 }
 
 /** Elimina patrones de fecha para evitar interferencia con montos */
@@ -96,6 +100,17 @@ function stripDates(line: string): string {
 /** Elimina porcentajes finales como "7,8%" o "100,00%" */
 function stripPercentages(line: string): string {
   return line.replace(/\d{1,3},?\d*%/g, ' ')
+}
+
+/**
+ * Retorna el índice del primer carácter donde comienza un monto
+ * en formato argentino válido (con separador de miles o decimal).
+ * Usado para separar la descripción de los montos sin que códigos
+ * alfanuméricos (Cta 09/24, U495455, AF330HM) corten la descripción.
+ */
+function firstAmountIndex(line: string): number {
+  const m = line.match(/\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+,\d{2}/)
+  return m?.index ?? -1
 }
 
 function parseDate(s: string): string {
@@ -150,14 +165,18 @@ function detectCompany(concept: string): typeof COMPANIES[number] {
   if (u.includes(' PDA') || u.startsWith('PDA') || u.includes('ALVARINAS'))
     return COMPANIES[2] // PDA (id:5)
 
-  // ÑANCUL
+  // ÑANCUL (campo / La Esperanza)
   if (u.includes('ÑANCUL') || u.includes('NANCUL') || u.includes('LAVALLE') ||
       u.includes('LA ESPERANZA') || u.includes('ESPERANZA') || u.includes('RAUCH') ||
       u.includes('CALEGARI') || u.includes('COOP RAUCH') || u.includes('NUTRIJO') ||
       u.includes('BORSANI') || u.includes('ECHANDI') || u.includes('ECOBAT') ||
       u.includes('INSEMINACION') || u.includes('AFTOSA') || u.includes('SENASA') ||
       u.includes('SOCIEDAD RURAL') || u.includes('GARCIA NICOLAS') ||
-      u.includes('GARCIA ALBERTO') || u.includes('SILVA GUSTAVO'))
+      u.includes('GARCIA ALBERTO') || u.includes('SILVA GUSTAVO') ||
+      u.includes('SILVETTI') || u.includes('AGUACORP') || u.includes('ITALSUR') ||
+      u.includes('FERRETERIA') || u.includes('CORRALON') || u.includes('CORRALÓN') ||
+      u.includes('FUMYTAN') || u.includes('VETERINARIA') || u.includes('COMBUSTIBLE') ||
+      u.includes('BAÑOS QUIMICOS') || u.includes('LANFRANCONI'))
     return COMPANIES[3] // ÑANCUL (id:2)
 
   // EML
@@ -210,6 +229,10 @@ function mkTx(
   ctx: ParserContext,
   overrides: Partial<ParsedTransaction> & Pick<ParsedTransaction, 'description' | 'type' | 'amount' | 'businessId' | 'businessName'>
 ): ParsedTransaction {
+  // Por defecto, TODO gasto/ingreso va a "Cuenta corriente" (id:1)
+  // salvo override explícito (e.g. "EFVO" en extraordinarios)
+  const defaultAccountId = 1
+  const defaultAccountName = 'Cuenta corriente'
   return {
     id: `pdf-${ctx.nextId++}`,
     selected: true,
@@ -224,8 +247,8 @@ function mkTx(
     expenseType: overrides.expenseType ?? 'ordinario',
     currency: overrides.currency ?? 'ARS',
     exchangeRate: null, // No guardamos TC del archivo
-    accountId: overrides.accountId ?? null,
-    accountName: overrides.accountName ?? null,
+    accountId: overrides.accountId ?? defaultAccountId,
+    accountName: overrides.accountName ?? defaultAccountName,
     ivaRate: overrides.ivaRate ?? null,
   }
 }
@@ -314,12 +337,24 @@ function parseOrdinaryExpenses(ctx: ParserContext): ParsedTransaction[] {
       const nums = extractNums(cleanLine)
       if (!nums.length) continue
 
-      // Concepto = texto antes del primer número
-      const firstDigit = rawLine.search(/\d/)
-      if (firstDigit <= 0) continue
-      const concept = rawLine.slice(0, firstDigit).trim()
+      // Concepto = texto antes del primer monto real (ignora códigos tipo
+      // "U495455", "Cta 09/24", patentes "AF330HM", nº factura "0314256", etc.)
+      const firstAmt = firstAmountIndex(rawLine)
+      if (firstAmt <= 0) continue
+      const concept = rawLine.slice(0, firstAmt).trim()
         .replace(/[-–—]+$/, '').trim() // limpiar guiones al final
       if (!concept || concept.length < 2) continue
+
+      // Si el concepto termina en "Nº", "N°", "N " o "#", el número detectado
+      // es parte de un código de referencia (ej: "Caja Nº102"), no un monto real → saltar
+      if (/[Nn][°º]\s*$|[Nn]\s+$|#\s*$/.test(concept)) continue
+
+      // Descartar montos absurdamente pequeños (< 1.000 ARS) que solo pueden
+      // ser artefactos del parser: números de referencia, número de página, etc.
+      // Los informes operan en miles/millones de ARS, ninguna transacción real
+      // debería ser inferior a $1.000.
+      const maxNum = Math.max(...nums)
+      if (maxNum < 1000) continue
 
       // Detectar IVA
       const ivaRate = detectIva(concept)
@@ -402,19 +437,28 @@ function parseOrdinaryExpenses(ctx: ParserContext): ParsedTransaction[] {
               }))
             })
           } else {
-            // No podemos mapear con certeza → una transacción con total
-            const co = detectCompanyForExpense(concept, companySubtotals, total)
-            results.push(mkTx(ctx, {
-              description: `${concept} (desglose: ${companyVals.join(' + ')})`,
-              notes: `MULTI-EMPRESA | ${cat.name}`,
-              type: 'expense',
-              amount: total,
-              businessId: co.id,
-              businessName: co.dbName,
-              categoryName: cat.name,
-              expenseType: 'ordinario',
-              ivaRate,
-            }))
+            // No coincide exactamente con activeCos → igual SPLIT en transacciones
+            // separadas (nunca lumped como MULTI-EMPRESA). Mapeamos por posición
+            // de columna entre las activas y marcamos para revisión. Es preferible
+            // tener N transacciones individuales (corregibles) que una sumada.
+            const targetCos = companyVals.length <= activeCos.length
+              ? activeCos.slice(0, companyVals.length)
+              : [...COMPANIES].slice(0, companyVals.length)
+            companyVals.forEach((amount, idx) => {
+              if (amount <= 0) return
+              const co = targetCos[idx] ?? COMPANIES[0]
+              results.push(mkTx(ctx, {
+                description: concept,
+                notes: `${co.key} | ${cat.name} | revisar empresa`,
+                type: 'expense',
+                amount,
+                businessId: co.id,
+                businessName: co.dbName,
+                categoryName: cat.name,
+                expenseType: 'ordinario',
+                ivaRate,
+              }))
+            })
           }
         } else {
           // No suman al total → usar el mayor valor (probablemente el total)
@@ -446,21 +490,32 @@ function detectCompanyForExpense(
   subtotals: Record<CompanyKey, number>,
   amount: number,
 ): typeof COMPANIES[number] {
-  // Primero intentar por nombre del concepto
-  const co = detectCompany(concept)
-  // Verificar que la empresa tiene montos en esta categoría
-  if (subtotals[co.key] > 0) return co
+  // 1) Matcheo fuerte por palabras clave del concepto
+  const detected = detectCompany(concept)
+  const hasKeyword = /GUEMES|GÜEMES|IBC|PROMENADE|COCHERA|PDA|ALVARINAS|ÑANCUL|NANCUL|LAVALLE|ESPERANZA|RAUCH|CALEGARI|NUTRIJO|BORSANI|ECHANDI|ECOBAT|INSEMINACION|AFTOSA|SENASA|SOCIEDAD RURAL|SILVETTI|AGUACORP|ITALSUR|FERRETERIA|FUMYTAN|VETERINARIA|OLIVOS|EML|SAN ANDRES|ACEESA|COLEGIO|TRANSPORTE ESCOLAR|COMEDOR|PEUGEOT JERO|AF330/i.test(concept)
+  if (hasKeyword && subtotals[detected.key] > 0) return detected
 
-  // Si la empresa detectada no tiene montos, buscar la empresa con subtotal > 0
-  // que más se acerca al monto
-  for (const company of COMPANIES) {
-    if (subtotals[company.key] >= amount) return company
-  }
-  // Fallback: primera empresa con subtotal > 0
-  for (const company of COMPANIES) {
-    if (subtotals[company.key] > 0) return company
-  }
-  return COMPANIES[0] // SADIA por defecto
+  // 2) Si sólo UNA empresa tiene subtotal > 0 en la sección, asignar a esa
+  const active = COMPANIES.filter(c => subtotals[c.key] > 0)
+  if (active.length === 1) return active[0]
+
+  // 3) Si concepto sugiere empresa y esa empresa está activa, usarla
+  if (subtotals[detected.key] > 0) return detected
+
+  // 4) Buscar la empresa cuyo subtotal exacto coincide con el monto (único match)
+  const exactMatches = active.filter(c => Math.abs(subtotals[c.key] - amount) < 10)
+  if (exactMatches.length === 1) return exactMatches[0]
+
+  // 5) Buscar la empresa cuyo subtotal sea >= amount y esté más cerca
+  const candidates = active
+    .filter(c => subtotals[c.key] >= amount)
+    .sort((a, b) => subtotals[a.key] - subtotals[b.key])
+  if (candidates.length > 0) return candidates[0]
+
+  // 6) Último recurso: primera activa en orden de columna
+  if (active.length > 0) return active[0]
+
+  return COMPANIES[0] // SADIA como último default
 }
 
 /** Asigna valores a empresas cuando no tenemos todas las columnas */
@@ -531,9 +586,9 @@ function parseIncomeDetails(ctx: ParserContext): ParsedTransaction[] {
       const nums = extractNums(stripPercentages(line))
       if (!nums.length) continue
 
-      const firstDigit = line.search(/\d/)
-      if (firstDigit <= 0) continue
-      let concept = line.slice(0, firstDigit).trim()
+      const firstAmt = firstAmountIndex(line)
+      if (firstAmt <= 0) continue
+      let concept = line.slice(0, firstAmt).trim()
       if (!concept || concept.length < 2) continue
 
       // Detectar si hay monto USD
@@ -574,9 +629,9 @@ function parseIncomeDetails(ctx: ParserContext): ParsedTransaction[] {
       const nums = extractNums(line)
       if (!nums.length) continue
 
-      const firstDigit = line.search(/\d/)
-      if (firstDigit <= 0) continue
-      const concept = line.slice(0, firstDigit).trim()
+      const firstAmt = firstAmountIndex(line)
+      if (firstAmt <= 0) continue
+      const concept = line.slice(0, firstAmt).trim()
       if (!concept || concept.length < 2) continue
 
       // Último número = monto en ARS
@@ -598,9 +653,9 @@ function parseIncomeDetails(ctx: ParserContext): ParsedTransaction[] {
     if (inNancul) {
       const nums = extractNums(line)
       if (!nums.length) continue
-      const firstDigit = line.search(/\d/)
-      if (firstDigit <= 0) continue
-      const concept = line.slice(0, firstDigit).trim()
+      const firstAmt = firstAmountIndex(line)
+      if (firstAmt <= 0) continue
+      const concept = line.slice(0, firstAmt).trim()
       if (!concept || concept.length < 2) continue
       const amount = nums[nums.length - 1]
       if (amount <= 0) continue
@@ -661,27 +716,50 @@ function parseIncomeFromSummaryTable(ctx: ParserContext, results: ParsedTransact
       const nums = extractNums(stripPercentages(line))
       if (!nums.length) break
 
-      // El último número es el total de la fila — lo usamos como monto
-      const amount = nums[nums.length - 1]
-      if (amount <= 0) break
-
-      const firstDigit = line.search(/\d/)
-      const concept = firstDigit > 0 ? line.slice(0, firstDigit).trim() : line.trim()
+      const firstAmt = firstAmountIndex(line)
+      const concept = firstAmt > 0 ? line.slice(0, firstAmt).trim() : line.trim()
       const cat = CATEGORY_MAP[row.catKey]
-      const co = row.defaultCo
 
-      results.push(mkTx(ctx, {
-        description: concept,
-        notes: `${co.key} | Ingresos`,
-        type: 'income',
-        amount,
-        businessId: co.id,
-        businessName: co.dbName,
-        categoryName: cat.name,
-        expenseType: 'ordinario',
-        accountId: 1,
-        accountName: 'Cuenta corriente',
-      }))
+      // Saltar si el concepto termina en indicador de referencia (Nº, N°, #)
+      if (/[Nn][°º]\s*$|#\s*$/.test(concept)) break
+
+      // Saltar si todos los montos son < 1.000 (artefacto del parser)
+      if (Math.max(...nums) < 1000) break
+
+      // Último número = total de la fila → los anteriores son los valores por empresa
+      // Mapeamos posicionalmente: [SADIA, GUEMES, PDA, ÑANCUL, EML]
+      const companyNums = nums.slice(0, -1)
+
+      if (companyNums.length === 0) {
+        // Solo hay un número = no tiene desglose, usar el total con la empresa por defecto
+        const co = row.defaultCo
+        results.push(mkTx(ctx, {
+          description: concept,
+          notes: `${co.key} | Ingresos`,
+          type: 'income',
+          amount: nums[0],
+          businessId: co.id,
+          businessName: co.dbName,
+          categoryName: cat.name,
+          expenseType: 'ordinario',
+        }))
+      } else {
+        // Crear una transacción por cada empresa con monto > 0
+        companyNums.forEach((amount, i) => {
+          if (amount <= 0) return
+          const co = COMPANIES[i] ?? row.defaultCo
+          results.push(mkTx(ctx, {
+            description: concept,
+            notes: `${co.key} | Ingresos`,
+            type: 'income',
+            amount,
+            businessId: co.id,
+            businessName: co.dbName,
+            categoryName: cat.name,
+            expenseType: 'ordinario',
+          }))
+        })
+      }
       break
     }
   }
@@ -733,19 +811,22 @@ function parseExtraordinary(ctx: ParserContext): ParsedTransaction[] {
         }))
       })
     } else if (companyNums.length > 0 && total > 0) {
-      // Menos de 5 valores → crear una transacción con el total
-      results.push(mkTx(ctx, {
-        description: 'Gastos Extraordinarios',
-        notes: 'MULTI-EMPRESA | Extraordinarios',
-        type: 'expense',
-        amount: total,
-        businessId: COMPANIES[0].id,
-        businessName: COMPANIES[0].dbName,
-        categoryName: 'Otros',
-        expenseType: 'extraordinario',
-        accountId: 1,
-        accountName: 'Cuenta corriente',
-      }))
+      // Menos de 5 valores → split por posición entre las empresas del informe,
+      // con flag "revisar empresa" para que el usuario verifique.
+      companyNums.forEach((amount, i) => {
+        if (amount <= 0) return
+        const co = COMPANIES[i] ?? COMPANIES[0]
+        results.push(mkTx(ctx, {
+          description: 'Gastos Extraordinarios',
+          notes: `${co.key} | Extraordinarios | revisar empresa`,
+          type: 'expense',
+          amount,
+          businessId: co.id,
+          businessName: co.dbName,
+          categoryName: 'Otros',
+          expenseType: 'extraordinario',
+        }))
+      })
     }
 
     console.log('[Parser] Extraordinarios (nuevo formato):', results.length)
@@ -787,8 +868,8 @@ function parseExtraordinary(ctx: ParserContext): ParsedTransaction[] {
       const nums = extractNums(rest)
       if (!nums.length) continue
 
-      const firstDigit = rest.search(/\d/)
-      const concept = firstDigit > 0 ? rest.slice(0, firstDigit).trim() : rest.trim()
+      const firstAmt = firstAmountIndex(rest)
+      const concept = firstAmt > 0 ? rest.slice(0, firstAmt).trim() : rest.trim()
       if (!concept || concept.length < 2) continue
 
       const usdMatch = rest.match(/USD\s*([\d.,]+)\s+([\d.,]+)/i)
@@ -870,8 +951,8 @@ function parseMLRetiros(ctx: ParserContext): ParsedTransaction[] {
     const nums = extractNums(rest)
     if (!nums.length) continue
 
-    const firstDigit = rest.search(/\d/)
-    const concept = firstDigit > 0 ? rest.slice(0, firstDigit).trim() : rest.trim()
+    const firstAmt = firstAmountIndex(rest)
+    const concept = firstAmt > 0 ? rest.slice(0, firstAmt).trim() : rest.trim()
     if (!concept || concept.length < 2) continue
 
     const amount = nums[0]
@@ -926,7 +1007,10 @@ export async function parsePdfReport(
     const periodDate = lastDayOfMonth(effectivePeriod)
     console.log('[Parser] Fecha asignada:', periodDate)
 
-    const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean)
+    const lines = rawText
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !l.startsWith('*')) // ignorar notas/comentarios con asteriscos
 
     const ctx: ParserContext = {
       lines,
