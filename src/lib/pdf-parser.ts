@@ -320,7 +320,14 @@ function parseOrdinaryExpenses(ctx: ParserContext): ParsedTransaction[] {
 
     const cat = CATEGORY_MAP[sec.catKey]
 
+    // Presupuesto restante por empresa — se decrementa a medida que se asignan filas.
+    // Esto permite resolver la ambigüedad en filas con un solo número: si SADIA ya
+    // consumió todo su presupuesto, el siguiente monto solo puede ser de GUEMES, etc.
+    const remaining: Record<CompanyKey, number> = { ...companySubtotals }
+
     // Parsear líneas individuales entre header y subtotal
+    let concept = ''
+    let ivaRate: number | null = null
     for (let i = headerIdx + 1; i < subtotalIdx; i++) {
       const rawLine = lines[i].trim()
       if (!rawLine) continue
@@ -337,50 +344,45 @@ function parseOrdinaryExpenses(ctx: ParserContext): ParsedTransaction[] {
       const nums = extractNums(cleanLine)
       if (!nums.length) continue
 
-      // Concepto = texto antes del primer monto real (ignora códigos tipo
-      // "U495455", "Cta 09/24", patentes "AF330HM", nº factura "0314256", etc.)
+      // Concepto = texto antes del primer monto real
       const firstAmt = firstAmountIndex(rawLine)
       if (firstAmt <= 0) continue
-      const concept = rawLine.slice(0, firstAmt).trim()
-        .replace(/[-–—]+$/, '').trim() // limpiar guiones al final
+      concept = rawLine.slice(0, firstAmt).trim().replace(/[-–—]+$/, '').trim()
       if (!concept || concept.length < 2) continue
 
-      // Si el concepto termina en "Nº", "N°", "N " o "#", el número detectado
-      // es parte de un código de referencia (ej: "Caja Nº102"), no un monto real → saltar
+      // Saltar si el número detectado es parte de un código de referencia (Nº102, #58)
       if (/[Nn][°º]\s*$|[Nn]\s+$|#\s*$/.test(concept)) continue
 
-      // Descartar montos absurdamente pequeños (< 1.000 ARS) que solo pueden
-      // ser artefactos del parser: números de referencia, número de página, etc.
-      // Los informes operan en miles/millones de ARS, ninguna transacción real
-      // debería ser inferior a $1.000.
-      const maxNum = Math.max(...nums)
-      if (maxNum < 1000) continue
+      // Saltar artefactos (montos < 1.000 ARS)
+      if (Math.max(...nums) < 1000) continue
 
-      // Detectar IVA
-      const ivaRate = detectIva(concept)
+      ivaRate = detectIva(concept)
 
-      // Determinar si es línea multi-empresa o single
-      if (nums.length === 1) {
-        // Un solo número → una empresa
+      // Empresas activas en esta sección (subtotal > 0), en orden de columna
+      const activeCos = COMPANIES.filter(co => companySubtotals[co.key] > 0)
+
+      // ── Resolver empresa por presupuesto restante ─────────────────────────────
+      // Funciona para filas con un solo valor: filtra candidatas que aún tienen
+      // presupuesto suficiente. Si queda una sola → asignación directa.
+      const resolveByBudget = (amount: number): typeof COMPANIES[number] | null => {
+        const withBudget = activeCos.filter(c => remaining[c.key] + 1 >= amount)
+        if (withBudget.length === 1) return withBudget[0]
+        // Si hay múltiples con presupuesto, intentar keyword match entre ellas
+        const kw = detectCompany(concept)
+        if (withBudget.some(c => c.key === kw.key)) return kw
+        // Primera activa con presupuesto en orden de columna
+        return withBudget[0] ?? null
+      }
+
+      if (nums.length === 1 || (nums.length === 2 && nums[0] === nums[1])) {
+        // Un solo valor efectivo → empresa única
         const amount = nums[0]
         if (amount <= 0) continue
-        const co = detectCompanyForExpense(concept, companySubtotals, amount)
-        results.push(mkTx(ctx, {
-          description: concept,
-          notes: `${co.key} | ${cat.name}`,
-          type: 'expense',
-          amount,
-          businessId: co.id,
-          businessName: co.dbName,
-          categoryName: cat.name,
-          expenseType: 'ordinario',
-          ivaRate,
-        }))
-      } else if (nums.length === 2 && nums[0] === nums[1]) {
-        // Dos números iguales → empresa única, valor = total
-        const amount = nums[0]
-        if (amount <= 0) continue
-        const co = detectCompanyForExpense(concept, companySubtotals, amount)
+
+        const co = resolveByBudget(amount)
+          ?? detectCompanyForExpense(concept, remaining, amount)
+
+        remaining[co.key] = Math.max(0, remaining[co.key] - amount)
         results.push(mkTx(ctx, {
           description: concept,
           notes: `${co.key} | ${cat.name}`,
@@ -393,78 +395,43 @@ function parseOrdinaryExpenses(ctx: ParserContext): ParsedTransaction[] {
           ivaRate,
         }))
       } else {
-        // Múltiples números → último es total, anteriores son por empresa
+        // Múltiples números → último es total, anteriores son por empresa en orden de columna
         const total = nums[nums.length - 1]
         const companyVals = nums.slice(0, -1)
         const sumVals = companyVals.reduce((s, v) => s + v, 0)
 
         if (Math.abs(sumVals - total) < 10 && companyVals.length > 1) {
-          // Los valores suman al total → crear transacción por cada empresa
-          const activeCos = COMPANIES.filter(co => companySubtotals[co.key] > 0)
+          // Los valores suman al total → split posicional por empresa activa
+          // Columnas: SADIA(0), GUEMES(1), PDA(2), ÑANCUL(3), EML(4)
+          const targetCos = companyVals.length === 5
+            ? COMPANIES                                          // todas las empresas
+            : companyVals.length === activeCos.length
+              ? activeCos                                        // mapeo directo a activas
+              : activeCos.slice(0, companyVals.length)          // primeras N activas
 
-          if (companyVals.length === activeCos.length) {
-            // Mapeo directo a empresas activas
-            companyVals.forEach((amount, idx) => {
-              if (amount <= 0) return
-              const co = activeCos[idx]
-              results.push(mkTx(ctx, {
-                description: concept,
-                notes: `${co.key} | ${cat.name}`,
-                type: 'expense',
-                amount,
-                businessId: co.id,
-                businessName: co.dbName,
-                categoryName: cat.name,
-                expenseType: 'ordinario',
-                ivaRate,
-              }))
-            })
-          } else if (companyVals.length === 5) {
-            // Todas las empresas tienen valor
-            companyVals.forEach((amount, idx) => {
-              if (amount <= 0) return
-              const co = COMPANIES[idx]
-              results.push(mkTx(ctx, {
-                description: concept,
-                notes: `${co.key} | ${cat.name}`,
-                type: 'expense',
-                amount,
-                businessId: co.id,
-                businessName: co.dbName,
-                categoryName: cat.name,
-                expenseType: 'ordinario',
-                ivaRate,
-              }))
-            })
-          } else {
-            // No coincide exactamente con activeCos → igual SPLIT en transacciones
-            // separadas (nunca lumped como MULTI-EMPRESA). Mapeamos por posición
-            // de columna entre las activas y marcamos para revisión. Es preferible
-            // tener N transacciones individuales (corregibles) que una sumada.
-            const targetCos = companyVals.length <= activeCos.length
-              ? activeCos.slice(0, companyVals.length)
-              : [...COMPANIES].slice(0, companyVals.length)
-            companyVals.forEach((amount, idx) => {
-              if (amount <= 0) return
-              const co = targetCos[idx] ?? COMPANIES[0]
-              results.push(mkTx(ctx, {
-                description: concept,
-                notes: `${co.key} | ${cat.name} | revisar empresa`,
-                type: 'expense',
-                amount,
-                businessId: co.id,
-                businessName: co.dbName,
-                categoryName: cat.name,
-                expenseType: 'ordinario',
-                ivaRate,
-              }))
-            })
-          }
+          companyVals.forEach((amount, idx) => {
+            if (amount <= 0) return
+            const co = targetCos[idx] ?? activeCos[0] ?? COMPANIES[0]
+            remaining[co.key] = Math.max(0, remaining[co.key] - amount)
+            results.push(mkTx(ctx, {
+              description: concept,
+              notes: `${co.key} | ${cat.name}`,
+              type: 'expense',
+              amount,
+              businessId: co.id,
+              businessName: co.dbName,
+              categoryName: cat.name,
+              expenseType: 'ordinario',
+              ivaRate,
+            }))
+          })
         } else {
-          // No suman al total → usar el mayor valor (probablemente el total)
+          // No suman al total → el mayor valor es el total, asignar a empresa por presupuesto
           const amount = Math.max(...nums)
           if (amount <= 0) continue
-          const co = detectCompanyForExpense(concept, companySubtotals, amount)
+          const co = resolveByBudget(amount)
+            ?? detectCompanyForExpense(concept, remaining, amount)
+          remaining[co.key] = Math.max(0, remaining[co.key] - amount)
           results.push(mkTx(ctx, {
             description: concept,
             notes: `${co.key} | ${cat.name}`,
