@@ -45,7 +45,9 @@ export default async function TransactionsPage({
     query = query.eq('expense_type', params.expense_type)
   }
   if (params.month) {
-    query = query.gte('date', `${params.month}-01`).lte('date', `${params.month}-31`)
+    const [y, m] = params.month.split('-').map(Number)
+    const lastDay = new Date(y, m, 0).getDate() // día 0 del mes siguiente = último día del mes actual
+    query = query.gte('date', `${params.month}-01`).lte('date', `${params.month}-${String(lastDay).padStart(2, '0')}`)
   }
   if (params.business_id) {
     query = query.eq('business_id', parseInt(params.business_id))
