@@ -34,7 +34,7 @@ export function KPICard({ title, value, color, subtitle, usdValue, dark = false 
     const dc = darkColors[color]
     return (
       <div
-        className="rounded-xl p-4 border transition-all hover:scale-[1.02]"
+        className="rounded-xl p-4 border transition-all hover:scale-[1.02] min-w-0"
         style={{
           background: 'var(--dash-card)',
           borderColor: 'var(--dash-border)',
@@ -44,7 +44,7 @@ export function KPICard({ title, value, color, subtitle, usdValue, dark = false 
         <p className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: 'var(--dash-text)' }}>
           {title}
         </p>
-        <p className="text-2xl font-bold" style={{ color: dc.accent }}>{value}</p>
+        <p className="text-base sm:text-xl lg:text-2xl font-bold leading-tight break-words" style={{ color: dc.accent }}>{value}</p>
         {usdValue && (
           <p className="text-xs mt-1 font-medium" style={{ color: '#6439ff' }}>USD {usdValue}</p>
         )}
@@ -59,11 +59,11 @@ export function KPICard({ title, value, color, subtitle, usdValue, dark = false 
   const lc = lightColors[color]
   return (
     <div
-      className="rounded-xl p-4 border border-gray-100 bg-white shadow-sm transition-all hover:shadow-md"
+      className="rounded-xl p-4 border border-gray-100 bg-white shadow-sm transition-all hover:shadow-md min-w-0"
       style={{ borderLeft: `3px solid ${lc.accent}` }}
     >
       <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">{title}</p>
-      <p className={cn('text-xl font-bold', lc.text)}>{value}</p>
+      <p className={cn('text-sm sm:text-base lg:text-xl font-bold leading-tight break-words', lc.text)}>{value}</p>
       {usdValue && <p className="text-xs mt-0.5 font-medium" style={{ color: '#6439ff' }}>USD {usdValue}</p>}
       {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
     </div>

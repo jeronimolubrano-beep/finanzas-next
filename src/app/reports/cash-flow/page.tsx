@@ -331,13 +331,13 @@ export default async function CashFlowPage({
         ].map(({ label, value, display, color, sub }) => (
           <div
             key={label}
-            className="rounded-xl border bg-white p-4 hover:shadow-sm transition"
+            className="rounded-xl border bg-white p-4 hover:shadow-sm transition min-w-0"
             style={{ borderColor: '#e8e8f0', borderLeft: `3px solid ${color}` }}
           >
             <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: C_MUTED }}>
               {label}
             </p>
-            <p className="text-xl font-bold tabular-nums" style={{ color }}>
+            <p className="text-sm sm:text-base lg:text-xl font-bold leading-tight break-words" style={{ color }}>
               {display}
             </p>
             {hasTC && value !== 0 && (
