@@ -97,10 +97,7 @@ export function DashboardCharts({ monthlyData, categoryData }: Props) {
                   </Pie>
                   <Tooltip
                     contentStyle={darkTooltipStyle}
-                    formatter={(value: number, name: string) => [
-                      `${pct(value)} · ${formatARS(value)}`,
-                      name,
-                    ] as [string, string]}
+                    formatter={(value) => [`${pct(Number(value))} · ${formatARS(Number(value))}`]}
                   />
                 </PieChart>
               </ResponsiveContainer>
