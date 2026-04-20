@@ -25,15 +25,16 @@ interface Props {
 
 const COLORS = ['#6439ff', '#2edbc1', '#fe4962', '#f59e0b', '#8b6fff', '#06b6d4', '#f97316', '#ec4899']
 
-function formatTooltip(value: unknown): string {
-  const n = Number(value)
-  return `$${isNaN(n) ? 0 : n.toLocaleString('en-US', { minimumFractionDigits: 0 })}`
+function formatARS(value: number): string {
+  const abs = Math.abs(value)
+  const sign = value < 0 ? '-' : ''
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000)     return `${sign}$${(abs / 1_000).toFixed(0)}K`
+  return `${sign}$${abs.toFixed(0)}`
 }
 
-function formatARS(value: number): string {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`
-  return `$${value.toFixed(0)}`
+function formatTooltip(value: unknown): string {
+  return formatARS(Number(value))
 }
 
 const darkTooltipStyle = {
@@ -72,42 +73,54 @@ export function DashboardCharts({ monthlyData, categoryData }: Props) {
         <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--dash-text)' }}>
           Gastos por categoria
         </h2>
-        {categoryData.length > 0 ? (
-          <>
-            <ResponsiveContainer width="100%" height={180}>
-              <PieChart>
-                <Pie
-                  data={categoryData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={45}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  dataKey="value"
-                  stroke="var(--dash-bg)"
-                  strokeWidth={2}
-                >
-                  {categoryData.map((_, index) => (
-                    <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={darkTooltipStyle} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="space-y-1.5 mt-3">
-              {categoryData.slice(0, 5).map((c, i) => (
-                <div key={c.name} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                    <span className="truncate max-w-[110px]" style={{ color: '#8b8ec0' }}>{c.name}</span>
+        {categoryData.length > 0 ? (() => {
+          const total = categoryData.reduce((s, c) => s + c.value, 0)
+          const pct = (v: number) => total > 0 ? ((v / total) * 100).toFixed(1) + '%' : '0%'
+          return (
+            <>
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie
+                    data={categoryData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={45}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    dataKey="value"
+                    stroke="var(--dash-bg)"
+                    strokeWidth={2}
+                  >
+                    {categoryData.map((_, index) => (
+                      <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={darkTooltipStyle}
+                    formatter={(value: unknown, name: unknown) => [
+                      `${pct(Number(value))} · ${formatARS(Number(value))}`,
+                      name,
+                    ]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-1.5 mt-3">
+                {categoryData.slice(0, 5).map((c, i) => (
+                  <div key={c.name} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                      <span className="truncate max-w-[110px]" style={{ color: '#8b8ec0' }}>{c.name}</span>
+                    </div>
+                    <span className="font-semibold tabular-nums" style={{ color: 'var(--dash-text)' }}>
+                      {pct(c.value)}
+                    </span>
                   </div>
-                  <span className="font-semibold" style={{ color: 'var(--dash-text)' }}>{formatARS(c.value)}</span>
-                </div>
-              ))}
-            </div>
-          </>
-        ) : (
+                ))}
+              </div>
+            </>
+          )
+        })() : (
           <div className="flex items-center justify-center h-40 text-sm" style={{ color: '#5b5c8c' }}>
             Sin datos de gastos
           </div>
@@ -131,7 +144,7 @@ export function DashboardCharts({ monthlyData, categoryData }: Props) {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--dash-border)" />
             <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#8b8ec0' }} axisLine={{ stroke: 'var(--dash-border)' }} tickLine={false} />
             <YAxis tickFormatter={formatARS} tick={{ fontSize: 11, fill: '#8b8ec0' }} axisLine={{ stroke: 'var(--dash-border)' }} tickLine={false} width={55} />
-            <Tooltip contentStyle={darkTooltipStyle} />
+            <Tooltip contentStyle={darkTooltipStyle} formatter={formatTooltip} />
             <Area
               type="monotone"
               dataKey="neto"
