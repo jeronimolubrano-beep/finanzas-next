@@ -1,11 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { formatMoney } from '@/lib/utils'
 import { getBalanceSheet, getConsolidatedBalanceSheet, calculateBalanceRatios } from './actions'
-import { Suspense } from 'react'
-import { TCSelector } from '@/components/TCSelector'
 import { BalanceSheetTable } from './BalanceSheetTable'
 import { BalanceRatios } from './BalanceRatios'
 import { ExportButtons } from './ExportButtons'
+import { getReportFxSettings, getMonthlyRate } from '@/lib/fx'
+import { DollarSign } from 'lucide-react'
+import { InlineFxLoader } from '@/components/InlineFxLoader'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
@@ -13,7 +14,7 @@ import { ExportButtons } from './ExportButtons'
 export default async function BalanceSheetPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; business?: string; tcMode?: string; tcValue?: string }>
+  searchParams: Promise<{ month?: string; business?: string }>
 }) {
   const params   = await searchParams
   const supabase = await createClient()
@@ -41,15 +42,13 @@ export default async function BalanceSheetPage({
     : null
   const businessLabel   = selectedBizObj?.name ?? 'Consolidado'
 
-  // ── Settings (tipo de cambio) ──────────────────────────────────────────────
-  const { data: settings } = await supabase.from('settings').select('*')
-  const settingsMap: Record<string, string> = {}
-  for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
-  const settingsTcRate = parseFloat(settingsMap.current_rate) || 0
-  const tcDate = settingsMap.rate_date || ''
-  const tcType = settingsMap.rate_type || ''
-  const tcRate = params.tcValue ? parseFloat(params.tcValue) : settingsTcRate
-  const hasTC  = tcRate > 0
+  // ── Report FX settings (closing rate for stock items) ─────────────────────
+  const { usdMode: fxUsdMode, rateType: fxRateType } = await getReportFxSettings()
+  const fxClosingRate = fxUsdMode
+    ? await getMonthlyRate(parseInt(year), parseInt(month), fxRateType, 'closing')
+    : null
+  const effectiveTcRate = fxClosingRate ?? 0
+  const effectiveHasTC  = fxUsdMode && effectiveTcRate > 0
 
   // ── Fetch Balance Sheet ────────────────────────────────────────────────────
   const balance = selectedBusiness === 'all'
@@ -78,8 +77,8 @@ export default async function BalanceSheetPage({
   }
 
   function fmtUSD(ars: number): string {
-    if (!hasTC || ars === 0) return '—'
-    return `$${formatMoney(Math.round(Math.abs(ars) / tcRate))}`
+    if (!effectiveHasTC || ars === 0) return '—'
+    return `$${formatMoney(Math.round(Math.abs(ars) / effectiveTcRate))}`
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -143,15 +142,25 @@ export default async function BalanceSheetPage({
         </div>
       </div>
 
-      {/* Selector TC */}
-      <Suspense fallback={null}>
-        <TCSelector
+      {/* USD mode indicator / loader */}
+      {fxUsdMode && effectiveHasTC && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border px-4 py-2.5 text-sm"
+             style={{ background: 'rgba(100,57,255,0.05)', borderColor: 'rgba(100,57,255,0.2)', color: '#6439ff' }}>
+          <DollarSign className="w-4 h-4 flex-shrink-0" />
+          <span className="font-medium">Modo USD activo</span>
+          <span className="text-xs" style={{ color: '#8b8ec0' }}>
+            · TC {fxRateType === 'blue' ? 'Blue' : 'Oficial'} cierre {selectedMonth}
+            {` · $${effectiveTcRate.toLocaleString('es-AR')}`}
+          </span>
+        </div>
+      )}
+      {fxUsdMode && !effectiveHasTC && (
+        <InlineFxLoader
           period={selectedMonth}
-          settingsTc={settingsTcRate}
-          settingsDate={tcDate}
-          settingsType={tcType}
+          rateType={fxRateType}
+          label={monthLabel}
         />
-      </Suspense>
+      )}
 
       {/* ── BALANCE VALIDATION ALERT ── */}
       {balance && (
@@ -219,7 +228,7 @@ export default async function BalanceSheetPage({
               <p className="text-xl font-bold tabular-nums" style={{ color }}>
                 {fmtBalance(value)}
               </p>
-              {hasTC && value !== 0 && (
+              {effectiveHasTC && value !== 0 && (
                 <p className="text-xs mt-0.5 tabular-nums" style={{ color: C_MUTED }}>
                   USD {fmtUSD(value)}
                 </p>
@@ -234,8 +243,8 @@ export default async function BalanceSheetPage({
       {balance && (
         <BalanceSheetTable
           balance={balance}
-          tcRate={tcRate}
-          hasTC={hasTC}
+          tcRate={effectiveTcRate}
+          hasTC={effectiveHasTC}
           fmtBalance={fmtBalance}
           fmtUSD={fmtUSD}
           formatMoney={formatMoney}

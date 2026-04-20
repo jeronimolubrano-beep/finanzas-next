@@ -6,6 +6,8 @@ import { DuePaymentsModal } from '@/components/dashboard/DuePaymentsModal'
 import { formatMoney, getCurrentYear, daysUntilDue, getPaymentsDueToday } from '@/lib/utils'
 import Link from 'next/link'
 import { AlertTriangle, Clock, BarChart3 } from 'lucide-react'
+import { getReportFxSettings, getMonthlyRate } from '@/lib/fx'
+import { getBurnRate, getRunway } from '@/lib/metrics'
 
 export default async function DashboardPage({
   searchParams,
@@ -99,9 +101,18 @@ export default async function DashboardPage({
   const tcType = settingsMap.rate_type || ''
   const hasTC = tcRate > 0
 
+  // ── Report FX settings (historical USD mode) ───────────────────────────────
+  const { usdMode: fxUsdMode, rateType: fxRateType } = await getReportFxSettings()
+  const fxCurrentRate = fxUsdMode
+    ? await getMonthlyRate(now.getFullYear(), now.getMonth() + 1, fxRateType, 'avg')
+    : null
+  // Effective rate: prefer historical monthly rate when usdMode is on
+  const effectiveTcRate = fxCurrentRate ?? tcRate
+  const effectiveHasTC  = effectiveTcRate > 0
+
   function toUSD(ars: number): string {
-    if (!hasTC) return ''
-    return (ars / tcRate).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+    if (!effectiveHasTC) return ''
+    return (ars / effectiveTcRate).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   }
 
   // Pagos pendientes para alertas y tabla
@@ -121,6 +132,56 @@ export default async function DashboardPage({
 
   const totalCobrar = allPending.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
   const totalPagar = allPending.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+
+  // ── MoM: compare with the same number of days in the previous month ─────────
+  const todayDay = now.getDate()
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const prevMonthEnd   = new Date(now.getFullYear(), now.getMonth() - 1, todayDay)
+  const prevDateFrom   = prevMonthStart.toISOString().slice(0, 10)
+  const prevDateTo     = prevMonthEnd.toISOString().slice(0, 10)
+
+  let priorQuery = supabase
+    .from('transactions')
+    .select('type, amount')
+    .gte('date', prevDateFrom)
+    .lte('date', prevDateTo)
+
+  if (params.business_id) {
+    priorQuery = priorQuery.eq('business_id', parseInt(params.business_id))
+  }
+
+  // ── Burn rate & runway ─────────────────────────────────────────────────────
+  const businessId = params.business_id ? parseInt(params.business_id) : null
+
+  const [
+    { data: priorTxsData },
+    burn3,
+    burn6,
+    burn12,
+    runway,
+  ] = await Promise.all([
+    priorQuery,
+    getBurnRate(businessId, 3,  fxRateType),
+    getBurnRate(businessId, 6,  fxRateType),
+    getBurnRate(businessId, 12, fxRateType),
+    getRunway(businessId),
+  ])
+
+  const priorTxs = priorTxsData ?? []
+  const priorIncome  = priorTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
+  const priorExpense = priorTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+  const priorNet     = priorIncome - priorExpense
+
+  function calcDelta(current: number, prior: number, higherIsBetter: boolean) {
+    if (prior === 0) return undefined
+    const pct = ((current - prior) / Math.abs(prior)) * 100
+    return { pct, isPositive: higherIsBetter ? pct >= 0 : pct <= 0 }
+  }
+
+  const momIncome   = calcDelta(income,  priorIncome,  true)
+  const momExpense  = calcDelta(expense, priorExpense, false)
+  const momNet      = calcDelta(net,     priorNet,     true)
+  const momSavings  = calcDelta(savingsRate, priorIncome > 0 ? ((priorNet / priorIncome) * 100) : 0, true)
 
   // Empresas para filtro
   const { data: businesses } = await supabase.from('businesses').select('*').order('name')
@@ -185,11 +246,19 @@ export default async function DashboardPage({
         savingsRate={savingsRate}
         topExpenseCat={topExpenseCat}
         topExpenseTotal={topExpenseTotal}
-        tcRate={tcRate}
-        tcType={tcType}
+        tcRate={effectiveTcRate}
+        tcType={fxUsdMode ? `${fxRateType === 'blue' ? 'Blue' : 'Oficial'} (histórico)` : tcType}
         tcDate={tcDate}
-        hasTC={hasTC}
+        hasTC={effectiveHasTC}
         period={period}
+        momIncome={momIncome}
+        momExpense={momExpense}
+        momNet={momNet}
+        momSavings={momSavings}
+        burn3={burn3}
+        burn6={burn6}
+        burn12={burn12}
+        runway={runway}
       />
     </div>
   )

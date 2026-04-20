@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   LayoutDashboard, ArrowLeftRight, PlusCircle, List,
   BarChart3, FileText, Settings, Tag, DollarSign, Menu, X, Camera, FileUp,
-  Bell, Clock, AlertTriangle, LogOut, Sparkles, Briefcase,
+  Bell, Clock, AlertTriangle, LogOut, Sparkles, Briefcase, Target,
   type LucideIcon
 } from 'lucide-react'
 import { formatMoney, formatDateShort } from '@/lib/utils'
@@ -42,6 +42,7 @@ const navItems: NavItem[] = [
       { href: '/reports/cash-flow', label: 'Flujo de Caja', icon: DollarSign },
       { href: '/reports/income-statement', label: 'Estado de Resultados', icon: FileText },
       { href: '/reports/balance-sheet', label: 'Estado de Situación Patrimonial', icon: FileText },
+      { href: '/budgets', label: 'Presupuesto', icon: Target },
     ],
   },
   {

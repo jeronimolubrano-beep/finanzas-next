@@ -1,5 +1,10 @@
 import { cn } from '@/lib/utils'
 
+export interface DeltaBadge {
+  pct: number        // percentage change (can be negative)
+  isPositive: boolean // true = green (good), false = red (bad)
+}
+
 interface KPICardProps {
   title: string
   value: string
@@ -7,6 +12,7 @@ interface KPICardProps {
   subtitle?: string
   usdValue?: string
   dark?: boolean
+  delta?: DeltaBadge
 }
 
 const lightColors = {
@@ -29,7 +35,18 @@ const darkColors = {
   orange: { accent: '#f97316', glow: 'rgba(249,115,22,0.15)' },
 }
 
-export function KPICard({ title, value, color, subtitle, usdValue, dark = false }: KPICardProps) {
+function DeltaChip({ delta }: { delta: DeltaBadge }) {
+  const arrow = delta.pct >= 0 ? '▲' : '▼'
+  const color = delta.isPositive ? '#2edbc1' : '#fe4962'
+  return (
+    <span className="inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums"
+          style={{ color }}>
+      {arrow} {Math.abs(delta.pct).toFixed(1)}% vs mes ant.
+    </span>
+  )
+}
+
+export function KPICard({ title, value, color, subtitle, usdValue, dark = false, delta }: KPICardProps) {
   if (dark) {
     const dc = darkColors[color]
     return (
@@ -48,6 +65,7 @@ export function KPICard({ title, value, color, subtitle, usdValue, dark = false 
         {usdValue && (
           <p className="text-xs mt-1 font-medium" style={{ color: '#6439ff' }}>USD {usdValue}</p>
         )}
+        {delta && <div className="mt-1"><DeltaChip delta={delta} /></div>}
         {subtitle && (
           <p className="text-xs mt-1" style={{ color: '#8b8ec0' }}>{subtitle}</p>
         )}
@@ -65,6 +83,7 @@ export function KPICard({ title, value, color, subtitle, usdValue, dark = false 
       <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">{title}</p>
       <p className={cn('text-sm sm:text-base lg:text-xl font-bold leading-tight break-words', lc.text)}>{value}</p>
       {usdValue && <p className="text-xs mt-0.5 font-medium" style={{ color: '#6439ff' }}>USD {usdValue}</p>}
+      {delta && <div className="mt-1"><DeltaChip delta={delta} /></div>}
       {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
     </div>
   )

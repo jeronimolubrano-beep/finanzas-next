@@ -3,8 +3,9 @@ import { formatMoney } from '@/lib/utils'
 import { TransactionDetail } from './TransactionDetail'
 import { CashFlowChart } from './CashFlowChart'
 import { ExportButtons } from './ExportButtons'
-import { Suspense } from 'react'
-import { TCSelector } from '@/components/TCSelector'
+import { getReportFxSettings, getMonthlyRate } from '@/lib/fx'
+import { DollarSign } from 'lucide-react'
+import { InlineFxLoader } from '@/components/InlineFxLoader'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -89,7 +90,7 @@ function buildFlowData(txs: AnyTx[]) {
 export default async function CashFlowPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; business?: string; tcMode?: string; tcValue?: string }>
+  searchParams: Promise<{ month?: string; business?: string }>
 }) {
   const params   = await searchParams
   const supabase = await createClient()
@@ -118,15 +119,13 @@ export default async function CashFlowPage({
     : null
   const businessLabel   = selectedBizObj?.name ?? 'Todas las empresas'
 
-  // ── Settings (tipo de cambio) ──────────────────────────────────────────────
-  const { data: settings } = await supabase.from('settings').select('*')
-  const settingsMap: Record<string, string> = {}
-  for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
-  const settingsTcRate = parseFloat(settingsMap.current_rate) || 0
-  const tcDate = settingsMap.rate_date || ''
-  const tcType = settingsMap.rate_type || ''
-  const tcRate = params.tcValue ? parseFloat(params.tcValue) : settingsTcRate
-  const hasTC  = tcRate > 0
+  // ── Report FX settings (per-month historical rates) ───────────────────────
+  const { usdMode: fxUsdMode, rateType: fxRateType } = await getReportFxSettings()
+  const fxMonthlyRate = fxUsdMode
+    ? await getMonthlyRate(parseInt(year), parseInt(month), fxRateType, 'avg')
+    : null
+  const effectiveUsdRate = fxMonthlyRate
+  const showUSD = fxUsdMode && effectiveUsdRate !== null && effectiveUsdRate > 0
 
   // ── Fetch all PERCIBIDO transactions up to end of period ───────────────────
   // (includes prior periods to calculate opening balance)
@@ -202,8 +201,8 @@ export default async function CashFlowPage({
   }
 
   function fmtUSD(ars: number): string {
-    if (!hasTC || ars === 0) return '—'
-    return `$${formatMoney(Math.round(Math.abs(ars) / tcRate))}`
+    if (!showUSD || ars === 0 || !effectiveUsdRate) return '—'
+    return `$${formatMoney(Math.round(Math.abs(ars) / effectiveUsdRate))}`
   }
 
   // ── Flow section renderer (returns JSX) ───────────────────────────────────
@@ -287,15 +286,25 @@ export default async function CashFlowPage({
         </div>
       </div>
 
-      {/* Selector TC */}
-      <Suspense fallback={null}>
-        <TCSelector
+      {/* USD mode indicator / loader */}
+      {fxUsdMode && showUSD && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border px-4 py-2.5 text-sm"
+             style={{ background: 'rgba(100,57,255,0.05)', borderColor: 'rgba(100,57,255,0.2)', color: '#6439ff' }}>
+          <DollarSign className="w-4 h-4 flex-shrink-0" />
+          <span className="font-medium">Modo USD activo</span>
+          <span className="text-xs" style={{ color: '#8b8ec0' }}>
+            · TC {fxRateType === 'blue' ? 'Blue' : 'Oficial'} promedio {selectedMonth}
+            {` · $${effectiveUsdRate!.toLocaleString('es-AR')}`}
+          </span>
+        </div>
+      )}
+      {fxUsdMode && !showUSD && (
+        <InlineFxLoader
           period={selectedMonth}
-          settingsTc={settingsTcRate}
-          settingsDate={tcDate}
-          settingsType={tcType}
+          rateType={fxRateType}
+          label={monthLabel}
         />
-      </Suspense>
+      )}
 
       {/* ── KPI CARDS ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -340,7 +349,7 @@ export default async function CashFlowPage({
             <p className="text-sm sm:text-base lg:text-xl font-bold leading-tight break-words" style={{ color }}>
               {display}
             </p>
-            {hasTC && value !== 0 && (
+            {showUSD && value !== 0 && (
               <p className="text-xs mt-0.5 tabular-nums" style={{ color: C_MUTED }}>
                 USD {fmtUSD(value)}
               </p>
@@ -375,7 +384,7 @@ export default async function CashFlowPage({
             <span className="text-sm font-semibold tabular-nums" style={{ color: C_PURP }}>
               {fmtBalance(openingBalance)}
             </span>
-            {hasTC && openingBalance !== 0 && (
+            {showUSD && openingBalance !== 0 && (
               <p className="text-xs" style={{ color: C_MUTED }}>USD {fmtUSD(openingBalance)}</p>
             )}
           </div>
@@ -409,7 +418,7 @@ export default async function CashFlowPage({
                       <th className="px-6 py-2 text-right text-xs font-medium w-44" style={{ color: C_MUTED }}>
                         ARS
                       </th>
-                      {hasTC && (
+                      {showUSD && (
                         <th className="px-6 py-2 text-right text-xs font-medium w-32" style={{ color: C_MUTED }}>
                           USD
                         </th>
@@ -423,7 +432,7 @@ export default async function CashFlowPage({
                       <>
                         <tr>
                           <td
-                            colSpan={hasTC ? 3 : 2}
+                            colSpan={showUSD ? 3 : 2}
                             className="px-6 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide"
                             style={{ color: C_POS }}
                           >
@@ -438,7 +447,7 @@ export default async function CashFlowPage({
                             <td className="py-1.5 px-6 text-right tabular-nums text-sm font-medium" style={{ color: C_POS }}>
                               ${formatMoney(c.total)}
                             </td>
-                            {hasTC && (
+                            {showUSD && (
                               <td className="py-1.5 px-6 text-right tabular-nums text-xs" style={{ color: C_MUTED }}>
                                 {fmtUSD(c.total)}
                               </td>
@@ -452,7 +461,7 @@ export default async function CashFlowPage({
                           <td className="py-2 px-6 text-right tabular-nums text-sm font-bold" style={{ color: C_POS }}>
                             ${formatMoney(flow.totalIn)}
                           </td>
-                          {hasTC && (
+                          {showUSD && (
                             <td className="py-2 px-6 text-right tabular-nums text-xs font-medium" style={{ color: C_MUTED }}>
                               {fmtUSD(flow.totalIn)}
                             </td>
@@ -466,7 +475,7 @@ export default async function CashFlowPage({
                       <>
                         <tr>
                           <td
-                            colSpan={hasTC ? 3 : 2}
+                            colSpan={showUSD ? 3 : 2}
                             className="px-6 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide"
                             style={{ color: C_NEG }}
                           >
@@ -481,7 +490,7 @@ export default async function CashFlowPage({
                             <td className="py-1.5 px-6 text-right tabular-nums text-sm font-medium" style={{ color: C_NEG }}>
                               (${formatMoney(c.total)})
                             </td>
-                            {hasTC && (
+                            {showUSD && (
                               <td className="py-1.5 px-6 text-right tabular-nums text-xs" style={{ color: C_MUTED }}>
                                 ({fmtUSD(c.total)})
                               </td>
@@ -495,7 +504,7 @@ export default async function CashFlowPage({
                           <td className="py-2 px-6 text-right tabular-nums text-sm font-bold" style={{ color: C_NEG }}>
                             (${formatMoney(flow.totalOut)})
                           </td>
-                          {hasTC && (
+                          {showUSD && (
                             <td className="py-2 px-6 text-right tabular-nums text-xs font-medium" style={{ color: C_MUTED }}>
                               ({fmtUSD(flow.totalOut)})
                             </td>
@@ -512,7 +521,7 @@ export default async function CashFlowPage({
                       <td className="py-2.5 px-6 text-right tabular-nums text-sm font-bold" style={{ color: signColor(flow.net) }}>
                         {fmtBalance(flow.net)}
                       </td>
-                      {hasTC && (
+                      {showUSD && (
                         <td className="py-2.5 px-6 text-right tabular-nums text-xs font-medium" style={{ color: C_MUTED }}>
                           {flow.net !== 0 ? fmtUSD(flow.net) : '—'}
                         </td>
@@ -543,7 +552,7 @@ export default async function CashFlowPage({
             <p className="text-base font-bold tabular-nums" style={{ color: signColor(variacionNeta) }}>
               {fmtBalance(variacionNeta)}
             </p>
-            {hasTC && variacionNeta !== 0 && (
+            {showUSD && variacionNeta !== 0 && (
               <p className="text-xs" style={{ color: C_MUTED }}>USD {fmtUSD(variacionNeta)}</p>
             )}
           </div>
@@ -568,7 +577,7 @@ export default async function CashFlowPage({
             <p className="text-3xl font-bold tabular-nums" style={{ color: signColor(saldoFinal) }}>
               {fmtBalance(saldoFinal)}
             </p>
-            {hasTC && (
+            {showUSD && (
               <p className="text-sm mt-1 tabular-nums" style={{ color: C_MUTED }}>
                 ≈ USD {saldoFinal !== 0 ? fmtUSD(saldoFinal) : '$0'}
               </p>

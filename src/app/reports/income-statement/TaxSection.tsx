@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { formatMoney0 } from '@/lib/utils'
-import { X, Percent, Receipt } from 'lucide-react'
+import { X, Percent } from 'lucide-react'
 
 export interface CategoryBreakdown {
   name: string
@@ -13,199 +13,92 @@ export interface CategoryBreakdown {
 }
 
 interface Props {
-  totalNet: number
+  totalNet: number           // kept in props for compat — no longer displayed
   categoryBreakdown: CategoryBreakdown[]
   selectedYear: number
 }
 
-export function TaxSection({ totalNet, categoryBreakdown, selectedYear }: Props) {
-  const [taxRate, setTaxRate] = useState(35)
+export function TaxSection({ categoryBreakdown, selectedYear }: Props) {
   const [showModal, setShowModal] = useState(false)
 
-  useEffect(() => {
-    const saved = localStorage.getItem('pl_tax_rate')
-    if (saved) setTaxRate(parseFloat(saved))
-  }, [])
-
-  const handleTaxRateChange = (val: number) => {
-    const clamped = Math.min(100, Math.max(0, val))
-    setTaxRate(clamped)
-    localStorage.setItem('pl_tax_rate', String(clamped))
-  }
-
-  const taxableIncome = Math.max(totalNet, 0)
-  const taxAmount = taxableIncome * (taxRate / 100)
-  const netAfterTax = totalNet - taxAmount
-
-  // Calcular IVA por tasa
+  // Aggregate IVA by rate across all categories
   const ivaByRate: Record<number, number> = {}
   let totalIVA = 0
   for (const cat of categoryBreakdown) {
     if (cat.ivaByRate) {
       for (const [rate, amount] of Object.entries(cat.ivaByRate)) {
         const rateNum = parseFloat(rate)
-        if (!ivaByRate[rateNum]) ivaByRate[rateNum] = 0
-        ivaByRate[rateNum] += amount
+        ivaByRate[rateNum] = (ivaByRate[rateNum] ?? 0) + amount
         totalIVA += amount
       }
     }
   }
 
+  // Categories that have any IVA, for the modal detail
+  const catsWithIva = categoryBreakdown.filter(
+    c => c.ivaByRate && Object.keys(c.ivaByRate).length > 0
+  )
+
+  if (totalIVA === 0) return null
+
   const fmt = (n: number) => `$${formatMoney0(Math.abs(n))}`
 
   return (
     <>
-      {/* ── Tax summary block ─────────────────────────────── */}
+      {/* ── IVA Summary ── */}
       <div
         className="mt-6 rounded-xl border overflow-hidden"
         style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}
       >
         {/* Header */}
         <div
-          className="flex items-center gap-2 px-5 py-3 border-b"
+          className="flex items-center justify-between px-5 py-3 border-b"
           style={{ borderColor: '#e8e8f0', background: '#f9f9ff' }}
         >
-          <Receipt className="w-4 h-4" style={{ color: '#6439ff' }} />
-          <h3 className="text-sm font-semibold" style={{ color: '#4a4a6a' }}>
-            Resultado después de impuestos — {selectedYear}
-          </h3>
-        </div>
-
-        <div className="divide-y" style={{ '--tw-divide-opacity': '1', borderColor: '#f0f0f8' } as React.CSSProperties}>
-          {/* Resultado antes de impuestos */}
-          <div className="flex items-center justify-between px-5 py-3.5">
-            <span className="text-sm font-medium" style={{ color: '#4a4a6a' }}>
-              Resultado antes de impuestos
-            </span>
-            <span
-              className={`font-bold tabular-nums text-base ${
-                totalNet >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'
-              }`}
-            >
-              {totalNet >= 0 ? '+' : '-'}{fmt(totalNet)}
-            </span>
-          </div>
-
-          {/* Tasa de impuesto */}
-          <div className="flex items-center justify-between px-5 py-3">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium" style={{ color: '#4a4a6a' }}>
-                Tasa de impuesto
-              </span>
-              <div
-                className="flex items-center gap-1 rounded-lg px-2.5 py-1 border"
-                style={{ borderColor: '#d4d0ff', background: '#f4f0ff' }}
-              >
-                <input
-                  type="number"
-                  value={taxRate}
-                  onChange={e => handleTaxRateChange(parseFloat(e.target.value) || 0)}
-                  min={0}
-                  max={100}
-                  step={0.5}
-                  className="w-10 text-sm font-bold text-right bg-transparent outline-none"
-                  style={{ color: '#6439ff' }}
-                />
-                <Percent className="w-3.5 h-3.5 shrink-0" style={{ color: '#6439ff' }} />
-              </div>
-            </div>
-            <span className="text-sm tabular-nums" style={{ color: '#8b8ec0' }}>
-              {taxRate.toFixed(1)}%
-            </span>
-          </div>
-
-          {/* Monto de impuesto — doble click */}
-          <div className="flex items-center justify-between px-5 py-3.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-medium" style={{ color: '#4a4a6a' }}>
-                Monto de impuesto
-              </span>
-              <button
-                onClick={() => setShowModal(true)}
-                className="text-xs px-2 py-0.5 rounded-full transition hover:opacity-80"
-                style={{ background: 'rgba(100,57,255,0.1)', color: '#6439ff' }}
-                title="Ver detalle por categoría"
-              >
-                ver detalle
-              </button>
-            </div>
-            <span
-              className="font-bold tabular-nums text-[#fe4962] cursor-pointer hover:underline underline-offset-2"
-              onDoubleClick={() => setShowModal(true)}
-              title="Doble click para ver detalle por categoría"
-            >
-              {taxAmount > 0 ? `-${fmt(taxAmount)}` : '$0'}
-            </span>
-          </div>
-
-          {/* Resultado neto after tax */}
-          <div
-            className="flex items-center justify-between px-5 py-4"
-            style={{ background: '#f4f4ff' }}
-          >
-            <span className="font-bold text-sm" style={{ color: '#1a1a2e' }}>
-              Resultado neto (after tax)
-            </span>
-            <span
-              className={`text-xl font-bold tabular-nums ${
-                netAfterTax >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'
-              }`}
-            >
-              {netAfterTax >= 0 ? '+' : '-'}{fmt(netAfterTax)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── IVA Summary ──────────────────────────────────── */}
-      {totalIVA > 0 && (
-        <div
-          className="mt-6 rounded-xl border overflow-hidden"
-          style={{ background: 'var(--card-bg)', borderColor: '#e8e8f0' }}
-        >
-          {/* Header */}
-          <div
-            className="flex items-center gap-2 px-5 py-3 border-b"
-            style={{ borderColor: '#e8e8f0', background: '#f9f9ff' }}
-          >
+          <div className="flex items-center gap-2">
             <Percent className="w-4 h-4" style={{ color: '#f59e0b' }} />
             <h3 className="text-sm font-semibold" style={{ color: '#4a4a6a' }}>
               Resumen de IVA — {selectedYear}
             </h3>
           </div>
+          <button
+            onClick={() => setShowModal(true)}
+            className="text-xs px-2.5 py-1 rounded-full transition hover:opacity-80"
+            style={{ background: 'rgba(245,158,11,0.12)', color: '#b45309' }}
+          >
+            ver detalle
+          </button>
+        </div>
 
-          <div className="divide-y" style={{ '--tw-divide-opacity': '1', borderColor: '#f0f0f8' } as React.CSSProperties}>
-            {/* IVA por tasa */}
-            {Object.entries(ivaByRate)
-              .sort((a, b) => parseFloat(b[0]) - parseFloat(a[0]))
-              .map(([rate, amount]) => (
-                <div key={rate} className="flex items-center justify-between px-5 py-3">
-                  <span className="text-sm font-medium" style={{ color: '#4a4a6a' }}>
-                    IVA {parseFloat(rate).toFixed(1)}%
-                  </span>
-                  <span className="font-bold tabular-nums text-[#f59e0b]">
-                    {fmt(amount)}
-                  </span>
-                </div>
-              ))}
+        <div className="divide-y" style={{ borderColor: '#f0f0f8' }}>
+          {/* IVA por tasa */}
+          {Object.entries(ivaByRate)
+            .sort((a, b) => parseFloat(b[0]) - parseFloat(a[0]))
+            .map(([rate, amount]) => (
+              <div key={rate} className="flex items-center justify-between px-5 py-3">
+                <span className="text-sm font-medium" style={{ color: '#4a4a6a' }}>
+                  IVA {parseFloat(rate).toFixed(1)}%
+                </span>
+                <span className="font-bold tabular-nums text-[#f59e0b]">
+                  {fmt(amount)}
+                </span>
+              </div>
+            ))}
 
-            {/* Total IVA */}
-            <div
-              className="flex items-center justify-between px-5 py-3.5"
-              style={{ background: '#fffbf0' }}
-            >
-              <span className="font-bold text-sm" style={{ color: '#4a4a6a' }}>
-                Total IVA
-              </span>
-              <span className="text-lg font-bold tabular-nums text-[#f59e0b]">
-                {fmt(totalIVA)}
-              </span>
-            </div>
+          {/* Total IVA */}
+          <div
+            className="flex items-center justify-between px-5 py-3.5"
+            style={{ background: '#fffbf0' }}
+          >
+            <span className="font-bold text-sm" style={{ color: '#4a4a6a' }}>Total IVA</span>
+            <span className="text-lg font-bold tabular-nums text-[#f59e0b]">
+              {fmt(totalIVA)}
+            </span>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* ── Modal detalle por categoría ───────────────────── */}
+      {/* ── Modal: IVA por concepto ── */}
       {showModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -223,10 +116,10 @@ export function TaxSection({ totalNet, categoryBreakdown, selectedYear }: Props)
             >
               <div>
                 <h2 className="font-bold text-base" style={{ color: '#1a1a2e' }}>
-                  Detalle de impuestos por categoría
+                  Detalle de IVA por concepto
                 </h2>
                 <p className="text-xs mt-0.5" style={{ color: '#8b8ec0' }}>
-                  Tasa aplicada: {taxRate}% · Año {selectedYear}
+                  Año {selectedYear} · IVA calculado sobre monto de gastos
                 </p>
               </div>
               <button
@@ -240,136 +133,44 @@ export function TaxSection({ totalNet, categoryBreakdown, selectedYear }: Props)
             {/* Modal table */}
             <div className="overflow-y-auto flex-1">
               <table className="w-full text-sm">
-                <thead
-                  className="sticky top-0"
-                  style={{ background: '#f4f4ff' }}
-                >
+                <thead className="sticky top-0" style={{ background: '#f4f4ff' }}>
                   <tr>
-                    <th
-                      className="px-4 py-2.5 text-left text-xs font-semibold uppercase"
-                      style={{ color: '#8b8ec0' }}
-                    >
-                      Categoría
-                    </th>
-                    <th
-                      className="px-4 py-2.5 text-right text-xs font-semibold uppercase"
-                      style={{ color: '#8b8ec0' }}
-                    >
-                      Neto
-                    </th>
-                    <th
-                      className="px-4 py-2.5 text-right text-xs font-semibold uppercase"
-                      style={{ color: '#8b8ec0' }}
-                    >
-                      IVA
-                    </th>
-                    <th
-                      className="px-4 py-2.5 text-right text-xs font-semibold uppercase"
-                      style={{ color: '#8b8ec0' }}
-                    >
-                      Tasa
-                    </th>
-                    <th
-                      className="px-4 py-2.5 text-right text-xs font-semibold uppercase"
-                      style={{ color: '#8b8ec0' }}
-                    >
-                      Impuesto
-                    </th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase"
+                        style={{ color: '#8b8ec0' }}>Concepto</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase"
+                        style={{ color: '#8b8ec0' }}>Tasa</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase"
+                        style={{ color: '#8b8ec0' }}>IVA</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {categoryBreakdown
-                    .filter(c => c.income > 0 || c.expense > 0)
-                    .sort((a, b) => (b.income - b.expense) - (a.income - a.expense))
-                    .map((cat, i) => {
-                      const catNet = cat.income - cat.expense
-                      const catTaxBase = Math.max(catNet, 0)
-                      const catTax = catTaxBase * (taxRate / 100)
-                      const catIVA = cat.ivaByRate
-                        ? Object.values(cat.ivaByRate).reduce((sum, amt) => sum + amt, 0)
-                        : 0
-                      const ivaRates = cat.ivaByRate ? Object.keys(cat.ivaByRate).map(r => `${parseFloat(r).toFixed(1)}%`).join(', ') : '—'
-                      return (
-                        <tr
-                          key={i}
-                          style={{ borderTop: '1px solid #f0f0f8' }}
-                        >
+                  {catsWithIva.map((cat, i) =>
+                    Object.entries(cat.ivaByRate ?? {})
+                      .sort((a, b) => parseFloat(b[0]) - parseFloat(a[0]))
+                      .map(([rate, amount]) => (
+                        <tr key={`${i}-${rate}`} style={{ borderTop: '1px solid #f0f0f8' }}>
                           <td className="px-4 py-3">
                             <span className="font-medium" style={{ color: '#1a1a2e' }}>
                               {cat.name}
                             </span>
-                            <span
-                              className="ml-2 text-xs px-1.5 py-0.5 rounded"
-                              style={{
-                                background:
-                                  cat.catType === 'income'
-                                    ? 'rgba(46,219,193,0.1)'
-                                    : 'rgba(254,73,98,0.1)',
-                                color:
-                                  cat.catType === 'income' ? '#2edbc1' : '#fe4962',
-                              }}
-                            >
-                              {cat.catType === 'income' ? 'ingreso' : 'gasto'}
-                            </span>
                           </td>
-                          <td
-                            className={`px-4 py-3 text-right tabular-nums font-medium ${
-                              catNet >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'
-                            }`}
-                          >
-                            {catNet >= 0 ? '+' : '-'}{fmt(catNet)}
+                          <td className="px-4 py-3 text-right tabular-nums text-sm"
+                              style={{ color: '#8b8ec0' }}>
+                            {parseFloat(rate).toFixed(1)}%
                           </td>
-                          <td className="px-4 py-3 text-right tabular-nums font-medium text-[#f59e0b]">
-                            {catIVA > 0 ? fmt(catIVA) : '—'}
-                          </td>
-                          <td
-                            className="px-4 py-3 text-right tabular-nums text-sm"
-                            style={{ color: '#8b8ec0' }}
-                          >
-                            {ivaRates}
-                          </td>
-                          <td
-                            className="px-4 py-3 text-right tabular-nums text-sm"
-                            style={{ color: '#8b8ec0' }}
-                          >
-                            {catTaxBase > 0 ? `${taxRate}%` : '—'}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums font-semibold text-[#fe4962]">
-                            {catTax > 0 ? `-${fmt(catTax)}` : '—'}
+                          <td className="px-4 py-3 text-right tabular-nums font-semibold text-[#f59e0b]">
+                            {fmt(amount)}
                           </td>
                         </tr>
-                      )
-                    })}
+                      ))
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr style={{ borderTop: '2px solid #e0e0ef', background: '#f9f9ff' }}>
-                    <td className="px-4 py-3 font-bold" style={{ color: '#1a1a2e' }}>
-                      Total
-                    </td>
-                    <td
-                      className={`px-4 py-3 text-right font-bold tabular-nums ${
-                        totalNet >= 0 ? 'text-[#2edbc1]' : 'text-[#fe4962]'
-                      }`}
-                    >
-                      {totalNet >= 0 ? '+' : '-'}{fmt(totalNet)}
-                    </td>
+                  <tr style={{ borderTop: '2px solid #e0e0ef', background: '#fffbf0' }}>
+                    <td className="px-4 py-3 font-bold" style={{ color: '#1a1a2e' }}>Total</td>
+                    <td className="px-4 py-3" />
                     <td className="px-4 py-3 text-right font-bold tabular-nums text-[#f59e0b]">
-                      {totalIVA > 0 ? fmt(totalIVA) : '—'}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-right font-bold"
-                      style={{ color: '#8b8ec0' }}
-                    >
-                      —
-                    </td>
-                    <td
-                      className="px-4 py-3 text-right font-bold"
-                      style={{ color: '#8b8ec0' }}
-                    >
-                      {taxRate}%
-                    </td>
-                    <td className="px-4 py-3 text-right font-bold tabular-nums text-[#fe4962]">
-                      {taxAmount > 0 ? `-${fmt(taxAmount)}` : '$0'}
+                      {fmt(totalIVA)}
                     </td>
                   </tr>
                 </tfoot>

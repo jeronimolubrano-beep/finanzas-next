@@ -4,6 +4,22 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getUserEmailByUsername, updateUsername } from '@/lib/db'
 
+export async function upsertCashPosition(
+  businessId: number | null,
+  amountArs: number,
+  notes?: string,
+) {
+  const supabase = await createClient()
+  await supabase.from('cash_positions').insert({
+    business_id: businessId,
+    amount_ars: amountArs,
+    recorded_at: new Date().toISOString().slice(0, 10),
+    notes: notes ?? null,
+  })
+  revalidatePath('/settings')
+  revalidatePath('/dashboard')
+}
+
 export async function changeUsernameAction(formData: FormData) {
   const newUsername = (formData.get('username') as string)?.trim()
 
@@ -58,4 +74,20 @@ export async function selectDolarRate(rate: string, date: string, rateType: stri
   revalidatePath('/settings')
   revalidatePath('/reports/cash-flow')
   revalidatePath('/reports/income-statement')
+}
+
+export async function saveReportCurrencySettings(formData: FormData) {
+  const supabase = await createClient()
+
+  const usdMode  = formData.get('reports_usd_mode')  === 'true' ? 'true' : 'false'
+  const rateType = (formData.get('reports_rate_type') as string) || 'oficial'
+
+  await supabase.from('settings').upsert({ key: 'reports_usd_mode',  value: usdMode  })
+  await supabase.from('settings').upsert({ key: 'reports_rate_type', value: rateType })
+
+  revalidatePath('/settings')
+  revalidatePath('/reports/income-statement')
+  revalidatePath('/reports/cash-flow')
+  revalidatePath('/reports/balance-sheet')
+  revalidatePath('/dashboard')
 }
