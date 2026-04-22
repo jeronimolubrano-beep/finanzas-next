@@ -6,6 +6,7 @@ import { ExportButtons } from './ExportButtons'
 import { getReportFxSettings, getMonthlyRate } from '@/lib/fx'
 import { DollarSign } from 'lucide-react'
 import { InlineFxLoader } from '@/components/InlineFxLoader'
+import { CategoryDrilldownRow } from './CategoryDrilldownRow'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -63,14 +64,18 @@ function sumTxs(txs: AnyTx[]) {
   return txs.reduce((s, t) => s + Number(t.amount), 0)
 }
 
-function groupByCategory(txs: AnyTx[]): { name: string; total: number }[] {
-  const map: Record<string, number> = {}
+type CategoryGroup = { name: string; total: number; txs: AnyTx[] }
+
+function groupByCategory(txs: AnyTx[]): CategoryGroup[] {
+  const map: Record<string, { total: number; txs: AnyTx[] }> = {}
   for (const t of txs) {
     const name = (t.categories as { name: string } | null)?.name ?? 'Sin categoría'
-    map[name] = (map[name] ?? 0) + Number(t.amount)
+    if (!map[name]) map[name] = { total: 0, txs: [] }
+    map[name].total += Number(t.amount)
+    map[name].txs.push(t)
   }
   return Object.entries(map)
-    .map(([name, total]) => ({ name, total }))
+    .map(([name, { total, txs }]) => ({ name, total, txs }))
     .sort((a, b) => b.total - a.total)
 }
 
@@ -440,19 +445,16 @@ export default async function CashFlowPage({
                           </td>
                         </tr>
                         {flow.inflows.map(c => (
-                          <tr key={c.name} className="border-t" style={{ borderColor: '#f4f4fc' }}>
-                            <td className="py-1.5 pl-10 pr-6 text-sm" style={{ color: C_NAVY }}>
-                              {c.name}
-                            </td>
-                            <td className="py-1.5 px-6 text-right tabular-nums text-sm font-medium" style={{ color: C_POS }}>
-                              ${formatMoney(c.total)}
-                            </td>
-                            {showUSD && (
-                              <td className="py-1.5 px-6 text-right tabular-nums text-xs" style={{ color: C_MUTED }}>
-                                {fmtUSD(c.total)}
-                              </td>
-                            )}
-                          </tr>
+                          <CategoryDrilldownRow
+                            key={c.name}
+                            name={c.name}
+                            total={c.total}
+                            txs={c.txs}
+                            type="income"
+                            showUSD={showUSD}
+                            usdRate={effectiveUsdRate}
+                            colSpan={showUSD ? 3 : 2}
+                          />
                         ))}
                         <tr className="border-t" style={{ borderColor: '#e8e8f0' }}>
                           <td className="py-2 pl-6 pr-6 text-xs font-semibold" style={{ color: C_NAVY }}>
@@ -483,19 +485,16 @@ export default async function CashFlowPage({
                           </td>
                         </tr>
                         {flow.outflows.map(c => (
-                          <tr key={c.name} className="border-t" style={{ borderColor: '#f4f4fc' }}>
-                            <td className="py-1.5 pl-10 pr-6 text-sm" style={{ color: C_NAVY }}>
-                              {c.name}
-                            </td>
-                            <td className="py-1.5 px-6 text-right tabular-nums text-sm font-medium" style={{ color: C_NEG }}>
-                              (${formatMoney(c.total)})
-                            </td>
-                            {showUSD && (
-                              <td className="py-1.5 px-6 text-right tabular-nums text-xs" style={{ color: C_MUTED }}>
-                                ({fmtUSD(c.total)})
-                              </td>
-                            )}
-                          </tr>
+                          <CategoryDrilldownRow
+                            key={c.name}
+                            name={c.name}
+                            total={c.total}
+                            txs={c.txs}
+                            type="expense"
+                            showUSD={showUSD}
+                            usdRate={effectiveUsdRate}
+                            colSpan={showUSD ? 3 : 2}
+                          />
                         ))}
                         <tr className="border-t" style={{ borderColor: '#e8e8f0' }}>
                           <td className="py-2 pl-6 pr-6 text-xs font-semibold" style={{ color: C_NAVY }}>
