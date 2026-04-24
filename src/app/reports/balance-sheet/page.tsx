@@ -92,7 +92,7 @@ export default async function BalanceSheetPage({
             Grupo Lubrano
           </p>
           <h1 className="text-2xl font-bold" style={{ color: C_NAVY }}>
-            Estado de Situación Patrimonial
+            Balance
           </h1>
           <p className="text-base font-medium mt-0.5" style={{ color: C_MUTED }}>
             {businessLabel} · {monthLabel}
