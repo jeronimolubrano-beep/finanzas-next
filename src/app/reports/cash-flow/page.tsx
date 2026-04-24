@@ -16,6 +16,8 @@ type AnyTx = {
   date: string
   description: string
   amount: number
+  currency: string | null
+  exchange_rate: number | null
   type: 'income' | 'expense'
   status: string
   expense_type: string | null
@@ -60,8 +62,14 @@ function classifyFlow(categoryName: string | null): FlowSection {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
+function txToARS(t: AnyTx): number {
+  const amt = Number(t.amount)
+  if (t.currency === 'USD') return amt * (t.exchange_rate ?? 1)
+  return amt
+}
+
 function sumTxs(txs: AnyTx[]) {
-  return txs.reduce((s, t) => s + Number(t.amount), 0)
+  return txs.reduce((s, t) => s + txToARS(t), 0)
 }
 
 type CategoryGroup = { name: string; total: number; txs: AnyTx[] }
@@ -71,7 +79,7 @@ function groupByCategory(txs: AnyTx[]): CategoryGroup[] {
   for (const t of txs) {
     const name = (t.categories as { name: string } | null)?.name ?? 'Sin categoría'
     if (!map[name]) map[name] = { total: 0, txs: [] }
-    map[name].total += Number(t.amount)
+    map[name].total += txToARS(t)
     map[name].txs.push(t)
   }
   return Object.entries(map)
@@ -152,7 +160,7 @@ export default async function CashFlowPage({
 
   // ── Opening balance (cumulative net from all prior percibido data) ─────────
   const openingBalance = priorTxs.reduce((s, t) =>
-    s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0)
+    s + (t.type === 'income' ? txToARS(t) : -txToARS(t)), 0)
 
   // ── Classify period transactions into flow sections ────────────────────────
   const withSection = periodTxs.map(t => ({
@@ -181,7 +189,7 @@ export default async function CashFlowPage({
     const dayStr = `${year}-${month}-${String(day).padStart(2, '0')}`
     const delta  = periodTxs
       .filter(t => t.date === dayStr)
-      .reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0)
+      .reduce((s, t) => s + (t.type === 'income' ? txToARS(t) : -txToARS(t)), 0)
     running += delta
     return { day, balance: Math.round(running) }
   })

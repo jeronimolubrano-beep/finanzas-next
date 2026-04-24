@@ -18,7 +18,7 @@ export default async function IncomeStatementPage({
 
   let query = supabase
     .from('transactions')
-    .select('date, type, amount, iva_rate, categories(name, type)')
+    .select('date, type, amount, currency, exchange_rate, iva_rate, categories(name, type)')
     .gte('date', `${selectedYear}-01-01`)
     .lte('date', `${selectedYear}-12-31`)
 
@@ -32,10 +32,20 @@ export default async function IncomeStatementPage({
     date: string
     type: string
     amount: number | string
+    currency: string | null
+    exchange_rate: number | null
     iva_rate: number | null
     categories: { name: string; type: string } | null
   }
   const txs = (transactions ?? []) as unknown as TxRow[]
+
+  function toARS(t: TxRow): number {
+    const amt = Number(t.amount)
+    if ((t.currency ?? 'ARS') === 'USD') {
+      return amt * (t.exchange_rate ?? 1)
+    }
+    return amt
+  }
 
   // Build category breakdown for tax modal with IVA tracking
   const catMap: Record<string, CategoryBreakdown & { ivaByRate: Record<number, number> }> = {}
@@ -46,11 +56,11 @@ export default async function IncomeStatementPage({
       catMap[name] = { name, catType, income: 0, expense: 0, ivaByRate: {} }
     }
     if (t.type === 'income') {
-      catMap[name].income += Number(t.amount)
+      catMap[name].income += toARS(t)
     } else {
-      catMap[name].expense += Number(t.amount)
+      catMap[name].expense += toARS(t)
       if (t.iva_rate && t.iva_rate > 0) {
-        const ivaAmount = Number(t.amount) * (t.iva_rate / 100)
+        const ivaAmount = toARS(t) * (t.iva_rate / 100)
         if (!catMap[name].ivaByRate[t.iva_rate]) catMap[name].ivaByRate[t.iva_rate] = 0
         catMap[name].ivaByRate[t.iva_rate] += ivaAmount
       }
@@ -66,8 +76,8 @@ export default async function IncomeStatementPage({
   const monthlyData: MonthData[] = months.map(m => {
     const monthStr = String(m).padStart(2, '0')
     const monthTxs = txs.filter((t: TxRow) => t.date.startsWith(`${selectedYear}-${monthStr}`))
-    const income  = monthTxs.filter((t: TxRow) => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-    const expense = monthTxs.filter((t: TxRow) => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+    const income  = monthTxs.filter((t: TxRow) => t.type === 'income').reduce((s, t) => s + toARS(t), 0)
+    const expense = monthTxs.filter((t: TxRow) => t.type === 'expense').reduce((s, t) => s + toARS(t), 0)
     const net = income - expense
     return { income, expense, net, savingsRate: income > 0 ? (net / income * 100) : 0 }
   })
