@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatMoney0 } from '@/lib/utils'
+import { formatMoney0, txToARS } from '@/lib/utils'
 import { DollarSign } from 'lucide-react'
 import { TaxSection, type CategoryBreakdown } from './TaxSection'
 import { getReportFxSettings, getMonthlyRates, arsToUsd, fmtUsd } from '@/lib/fx'
@@ -26,7 +26,11 @@ export default async function IncomeStatementPage({
     query = query.eq('business_id', parseInt(params.business_id))
   }
 
-  const { data: transactions } = await query
+  const [{ data: transactions }, { data: settings }] = await Promise.all([
+    query,
+    supabase.from('settings').select('key, value').eq('key', 'current_rate').single(),
+  ])
+  const fallbackRate = parseFloat((settings as { value?: string } | null)?.value ?? '0') || 1
 
   type TxRow = {
     date: string
@@ -39,13 +43,7 @@ export default async function IncomeStatementPage({
   }
   const txs = (transactions ?? []) as unknown as TxRow[]
 
-  function toARS(t: TxRow): number {
-    const amt = Number(t.amount)
-    if ((t.currency ?? 'ARS') === 'USD') {
-      return amt * (t.exchange_rate ?? 1)
-    }
-    return amt
-  }
+  const toARS = (t: TxRow) => txToARS(t.amount, t.currency, t.exchange_rate, fallbackRate)
 
   // Build category breakdown for tax modal with IVA tracking
   const catMap: Record<string, CategoryBreakdown & { ivaByRate: Record<number, number> }> = {}

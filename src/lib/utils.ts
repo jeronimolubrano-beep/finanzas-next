@@ -1,5 +1,26 @@
 // Helpers de formateo y utilidades
 
+/**
+ * Convierte el monto de una transacción a ARS.
+ * - Si la moneda es USD usa el exchange_rate de la transacción.
+ * - Si exchange_rate es null usa `fallbackRate` (TC de settings).
+ * - Si la moneda es ARS devuelve el monto tal cual.
+ *
+ * Fuente única de verdad para toda la app — importar desde aquí.
+ */
+export function txToARS(
+  amount: number | string,
+  currency: string | null | undefined,
+  exchangeRate: number | null | undefined,
+  fallbackRate: number,
+): number {
+  const amt = Number(amount)
+  if ((currency ?? 'ARS') === 'USD') {
+    return amt * (exchangeRate ?? fallbackRate)
+  }
+  return amt
+}
+
 export function formatMoney(value: number): string {
   return value.toLocaleString('en-US', {
     minimumFractionDigits: 2,

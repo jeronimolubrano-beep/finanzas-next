@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatMoney } from '@/lib/utils'
+import { formatMoney, txToARS as baseTxToARS } from '@/lib/utils'
 import { TransactionDetail } from './TransactionDetail'
 import { CashFlowChart } from './CashFlowChart'
 import { ExportButtons } from './ExportButtons'
@@ -62,11 +62,7 @@ function classifyFlow(categoryName: string | null): FlowSection {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-function txToARS(t: AnyTx): number {
-  const amt = Number(t.amount)
-  if (t.currency === 'USD') return amt * (t.exchange_rate ?? 1)
-  return amt
-}
+// txToARS se instancia en el page con el fallbackRate correcto (ver más abajo)
 
 function sumTxs(txs: AnyTx[]) {
   return txs.reduce((s, t) => s + txToARS(t), 0)
@@ -120,6 +116,12 @@ export default async function CashFlowPage({
   const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
   const monthLabel = `${MONTH_NAMES[parseInt(month) - 1]} ${year}`
+
+  // ── TC fallback (para transacciones USD sin exchange_rate) ───────────────
+  const { data: rateSetting } = await supabase
+    .from('settings').select('value').eq('key', 'current_rate').single()
+  const fallbackRate = parseFloat((rateSetting as { value?: string } | null)?.value ?? '0') || 1
+  const txToARS = (t: AnyTx) => baseTxToARS(t.amount, t.currency, t.exchange_rate, fallbackRate)
 
   // ── Businesses ─────────────────────────────────────────────────────────────
   const { data: businesses } = await supabase

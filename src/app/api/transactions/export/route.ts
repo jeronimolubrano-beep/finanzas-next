@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import * as XLSX from 'xlsx'
+import { txToARS } from '@/lib/utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,8 +44,12 @@ export async function GET(request: NextRequest) {
     if (categoryId)
       query = query.eq('category_id', parseInt(categoryId))
 
-    const { data: transactions, error } = await query
+    const [{ data: transactions, error }, { data: rateSetting }] = await Promise.all([
+      query,
+      supabase.from('settings').select('value').eq('key', 'current_rate').single(),
+    ])
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const fallbackRate = parseFloat((rateSetting as { value?: string } | null)?.value ?? '0') || 1
 
     // ── Build rows ──────────────────────────────────────────────────────────────
     const rows = (transactions ?? []).map(t => {
@@ -110,8 +115,8 @@ export async function GET(request: NextRequest) {
     XLSX.utils.book_append_sheet(wb, ws, 'Transacciones')
 
     // Summary sheet
-    const income  = (transactions ?? []).filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-    const expense = (transactions ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+    const income  = (transactions ?? []).filter(t => t.type === 'income').reduce((s, t) => s + txToARS(t.amount, t.currency, t.exchange_rate, fallbackRate), 0)
+    const expense = (transactions ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + txToARS(t.amount, t.currency, t.exchange_rate, fallbackRate), 0)
     const summaryRows = [
       { Concepto: 'Total ingresos (ARS)',  Monto: income  },
       { Concepto: 'Total gastos (ARS)',    Monto: expense },
