@@ -62,20 +62,19 @@ function classifyFlow(categoryName: string | null): FlowSection {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-// txToARS se instancia en el page con el fallbackRate correcto (ver más abajo)
-
-function sumTxs(txs: AnyTx[]) {
-  return txs.reduce((s, t) => s + txToARS(t), 0)
-}
-
+type Converter = (t: AnyTx) => number
 type CategoryGroup = { name: string; total: number; txs: AnyTx[] }
 
-function groupByCategory(txs: AnyTx[]): CategoryGroup[] {
+function sumTxs(txs: AnyTx[], conv: Converter) {
+  return txs.reduce((s, t) => s + conv(t), 0)
+}
+
+function groupByCategory(txs: AnyTx[], conv: Converter): CategoryGroup[] {
   const map: Record<string, { total: number; txs: AnyTx[] }> = {}
   for (const t of txs) {
     const name = (t.categories as { name: string } | null)?.name ?? 'Sin categoría'
     if (!map[name]) map[name] = { total: 0, txs: [] }
-    map[name].total += txToARS(t)
+    map[name].total += conv(t)
     map[name].txs.push(t)
   }
   return Object.entries(map)
@@ -83,13 +82,13 @@ function groupByCategory(txs: AnyTx[]): CategoryGroup[] {
     .sort((a, b) => b.total - a.total)
 }
 
-function buildFlowData(txs: AnyTx[]) {
-  const incomeTxs = txs.filter(t => t.type === 'income')
+function buildFlowData(txs: AnyTx[], conv: Converter) {
+  const incomeTxs  = txs.filter(t => t.type === 'income')
   const expenseTxs = txs.filter(t => t.type === 'expense')
-  const inflows  = groupByCategory(incomeTxs)
-  const outflows = groupByCategory(expenseTxs)
-  const totalIn  = sumTxs(incomeTxs)
-  const totalOut = sumTxs(expenseTxs)
+  const inflows    = groupByCategory(incomeTxs, conv)
+  const outflows   = groupByCategory(expenseTxs, conv)
+  const totalIn    = sumTxs(incomeTxs, conv)
+  const totalOut   = sumTxs(expenseTxs, conv)
   return { inflows, outflows, totalIn, totalOut, net: totalIn - totalOut }
 }
 
@@ -174,13 +173,13 @@ export default async function CashFlowPage({
   const invTxs = withSection.filter(t => t.section === 'inversion')
   const finTxs = withSection.filter(t => t.section === 'financiamiento')
 
-  const opFlow  = buildFlowData(opTxs)
-  const invFlow = buildFlowData(invTxs)
-  const finFlow = buildFlowData(finTxs)
+  const opFlow  = buildFlowData(opTxs,  txToARS)
+  const invFlow = buildFlowData(invTxs, txToARS)
+  const finFlow = buildFlowData(finTxs, txToARS)
 
   // ── Summary KPIs ───────────────────────────────────────────────────────────
-  const totalEntradas  = sumTxs(periodTxs.filter(t => t.type === 'income'))
-  const totalSalidas   = sumTxs(periodTxs.filter(t => t.type === 'expense'))
+  const totalEntradas  = sumTxs(periodTxs.filter(t => t.type === 'income'),  txToARS)
+  const totalSalidas   = sumTxs(periodTxs.filter(t => t.type === 'expense'), txToARS)
   const variacionNeta  = totalEntradas - totalSalidas
   const saldoFinal     = openingBalance + variacionNeta
 
