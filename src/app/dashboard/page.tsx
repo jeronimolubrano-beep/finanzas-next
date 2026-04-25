@@ -3,7 +3,7 @@ import { KPICard } from '@/components/KPICard'
 import { DashboardCharts } from './DashboardCharts'
 import { DashboardTabs } from './DashboardTabs'
 import { DuePaymentsModal } from '@/components/dashboard/DuePaymentsModal'
-import { formatMoney, getCurrentYear, daysUntilDue, getPaymentsDueToday } from '@/lib/utils'
+import { formatMoney, getCurrentYear, daysUntilDue, getPaymentsDueToday, txToARS } from '@/lib/utils'
 import Link from 'next/link'
 import { AlertTriangle, Clock, BarChart3 } from 'lucide-react'
 import { getReportFxSettings, getMonthlyRate } from '@/lib/fx'
@@ -31,10 +31,16 @@ export default async function DashboardPage({
     dateFrom = from.toISOString().slice(0, 10)
   }
 
+  // Fetch TC fallback antes del query principal
+  const { data: settingsRaw } = await supabase.from('settings').select('*')
+  const settingsMapEarly: Record<string, string> = {}
+  for (const s of settingsRaw ?? []) settingsMapEarly[s.key] = s.value ?? ''
+  const fallbackRate = parseFloat(settingsMapEarly.current_rate) || 1
+
   // Query transacciones del periodo con fecha y categoria
   let query = supabase
     .from('transactions')
-    .select('date, type, amount, status, category_id, categories(name)')
+    .select('date, type, amount, currency, exchange_rate, status, category_id, categories(name)')
     .gte('date', dateFrom)
     .order('date')
 
@@ -45,9 +51,13 @@ export default async function DashboardPage({
   const { data: txs } = await query
   const allTxs = txs ?? []
 
+  // Helper para convertir a ARS usando TC de la transacción o fallback
+  const toARS = (t: { amount: number | string; currency?: string | null; exchange_rate?: number | null }) =>
+    txToARS(t.amount, t.currency, t.exchange_rate, fallbackRate)
+
   // KPIs principales
-  const income = allTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-  const expense = allTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+  const income = allTxs.filter(t => t.type === 'income').reduce((s, t) => s + toARS(t), 0)
+  const expense = allTxs.filter(t => t.type === 'expense').reduce((s, t) => s + toARS(t), 0)
   const net = income - expense
   const savingsRate = income > 0 ? (net / income * 100) : 0
 
@@ -56,7 +66,7 @@ export default async function DashboardPage({
   const catNames: Record<string, string> = {}
   for (const t of allTxs.filter(t => t.type === 'expense')) {
     const cid = String(t.category_id)
-    catTotals[cid] = (catTotals[cid] || 0) + Number(t.amount)
+    catTotals[cid] = (catTotals[cid] || 0) + toARS(t)
     if (t.categories) catNames[cid] = (t.categories as unknown as { name: string }).name
   }
   const topCatId = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]
@@ -71,8 +81,8 @@ export default async function DashboardPage({
   for (const t of allTxs) {
     const key = t.date.slice(0, 7)
     if (!monthMap[key]) monthMap[key] = { ingresos: 0, gastos: 0 }
-    if (t.type === 'income') monthMap[key].ingresos += Number(t.amount)
-    else monthMap[key].gastos += Number(t.amount)
+    if (t.type === 'income') monthMap[key].ingresos += toARS(t)
+    else monthMap[key].gastos += toARS(t)
   }
 
   const monthlyData = Object.entries(monthMap)
@@ -92,13 +102,10 @@ export default async function DashboardPage({
     .sort((a, b) => b.value - a.value)
     .slice(0, 8)
 
-  // Tipo de cambio
-  const { data: settings } = await supabase.from('settings').select('*')
-  const settingsMap: Record<string, string> = {}
-  for (const s of settings ?? []) settingsMap[s.key] = s.value ?? ''
-  const tcRate = parseFloat(settingsMap.current_rate) || 0
-  const tcDate = settingsMap.rate_date || ''
-  const tcType = settingsMap.rate_type || ''
+  // Tipo de cambio (reusa el fetch de settings de arriba)
+  const tcRate = parseFloat(settingsMapEarly.current_rate) || 0
+  const tcDate = settingsMapEarly.rate_date || ''
+  const tcType = settingsMapEarly.rate_type || ''
   const hasTC = tcRate > 0
 
   // ── Report FX settings (historical USD mode) ───────────────────────────────
@@ -142,7 +149,7 @@ export default async function DashboardPage({
 
   let priorQuery = supabase
     .from('transactions')
-    .select('type, amount')
+    .select('type, amount, currency, exchange_rate')
     .gte('date', prevDateFrom)
     .lte('date', prevDateTo)
 
@@ -168,8 +175,8 @@ export default async function DashboardPage({
   ])
 
   const priorTxs = priorTxsData ?? []
-  const priorIncome  = priorTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-  const priorExpense = priorTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+  const priorIncome  = priorTxs.filter(t => t.type === 'income').reduce((s, t) => s + toARS(t), 0)
+  const priorExpense = priorTxs.filter(t => t.type === 'expense').reduce((s, t) => s + toARS(t), 0)
   const priorNet     = priorIncome - priorExpense
 
   function calcDelta(current: number, prior: number, higherIsBetter: boolean) {

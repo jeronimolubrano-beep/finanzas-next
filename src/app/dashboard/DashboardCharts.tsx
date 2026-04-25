@@ -59,7 +59,7 @@ export function DashboardCharts({ monthlyData, categoryData }: Props) {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--dash-border)" />
             <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#8b8ec0' }} axisLine={{ stroke: '#252966' }} tickLine={false} />
             <YAxis tickFormatter={formatARS} tick={{ fontSize: 11, fill: '#8b8ec0' }} axisLine={{ stroke: '#252966' }} tickLine={false} width={55} />
-            <Tooltip contentStyle={darkTooltipStyle} cursor={{ fill: 'rgba(100,57,255,0.1)' }} />
+            <Tooltip contentStyle={darkTooltipStyle} cursor={{ fill: 'rgba(100,57,255,0.1)' }} formatter={formatTooltip} />
             <Legend wrapperStyle={{ fontSize: 12, color: '#8b8ec0' }} />
             <Bar dataKey="ingresos" name="Ingresos" fill="#2edbc1" radius={[4, 4, 0, 0]} />
             <Bar dataKey="gastos" name="Gastos" fill="#fe4962" radius={[4, 4, 0, 0]} />
