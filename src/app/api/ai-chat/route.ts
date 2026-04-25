@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { txToARS } from '@/lib/utils'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -16,15 +17,18 @@ export async function POST(request: NextRequest) {
     // ── Fetch financial context ──────────────────────────────────────────────
     const supabase = await createClient()
 
-    const { data: transactions } = await supabase
-      .from('transactions')
-      .select('date, description, amount, type, status, currency, categories(name), businesses(name)')
-      .order('date', { ascending: false })
-      .limit(150)
+    const [{ data: transactions }, { data: settings }] = await Promise.all([
+      supabase
+        .from('transactions')
+        .select('date, description, amount, type, status, currency, exchange_rate, categories(name), businesses(name)')
+        .order('date', { ascending: false })
+        .limit(300),
+      supabase.from('settings').select('*'),
+    ])
 
-    const { data: settings } = await supabase.from('settings').select('*')
     const sMap: Record<string, string> = {}
     for (const s of settings ?? []) sMap[s.key] = s.value ?? ''
+    const fallbackRate = parseFloat(sMap.current_rate) || 1
 
     const { data: categories } = await supabase.from('categories').select('name, type')
     const { data: businesses } = await supabase.from('businesses').select('name')
@@ -37,12 +41,15 @@ export async function POST(request: NextRequest) {
       type: string
       status: string
       currency: string | null
+      exchange_rate: number | null
       categories: { name: string } | null
       businesses: { name: string } | null
     }
     const txs = (transactions ?? []) as unknown as Tx[]
-    const totalIncome  = txs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-    const totalExpense = txs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+    const toARS = (t: Tx) => txToARS(t.amount, t.currency, t.exchange_rate, fallbackRate)
+
+    const totalIncome  = txs.filter(t => t.type === 'income').reduce((s, t) => s + toARS(t), 0)
+    const totalExpense = txs.filter(t => t.type === 'expense').reduce((s, t) => s + toARS(t), 0)
     const pendingCount = txs.filter(t => t.status === 'devengado').length
     const paidCount    = txs.filter(t => t.status === 'percibido').length
 
@@ -51,8 +58,8 @@ export async function POST(request: NextRequest) {
     for (const t of txs) {
       const m = t.date.slice(0, 7)
       if (!monthly[m]) monthly[m] = { income: 0, expense: 0 }
-      if (t.type === 'income') monthly[m].income += Number(t.amount)
-      else monthly[m].expense += Number(t.amount)
+      if (t.type === 'income') monthly[m].income += toARS(t)
+      else monthly[m].expense += toARS(t)
     }
 
     // By category
@@ -60,8 +67,8 @@ export async function POST(request: NextRequest) {
     for (const t of txs) {
       const name = t.categories?.name ?? 'Sin categoría'
       if (!byCat[name]) byCat[name] = { income: 0, expense: 0 }
-      if (t.type === 'income') byCat[name].income += Number(t.amount)
-      else byCat[name].expense += Number(t.amount)
+      if (t.type === 'income') byCat[name].income += toARS(t)
+      else byCat[name].expense += toARS(t)
     }
 
     // By business
@@ -69,8 +76,8 @@ export async function POST(request: NextRequest) {
     for (const t of txs) {
       const name = t.businesses?.name ?? 'Sin empresa'
       if (!byBiz[name]) byBiz[name] = { income: 0, expense: 0 }
-      if (t.type === 'income') byBiz[name].income += Number(t.amount)
-      else byBiz[name].expense += Number(t.amount)
+      if (t.type === 'income') byBiz[name].income += toARS(t)
+      else byBiz[name].expense += toARS(t)
     }
 
     const fmt = (n: number) => `$${n.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`
@@ -103,10 +110,12 @@ ${Object.entries(byBiz).sort((a, b) => (b[1].income + b[1].expense) - (a[1].inco
 Categorías: ${(categories ?? []).map(c => `${c.name} (${c.type})`).join(', ')}
 Empresas: ${(businesses ?? []).map(b => b.name).join(', ')}
 
-Últimas 15 transacciones:
-${txs.slice(0, 15).map(t =>
-  `  ${t.date} | ${t.description} | ${fmt(Number(t.amount))} ${t.currency ?? 'ARS'} | ${t.type} | ${t.status} | ${t.categories?.name ?? '-'} | ${t.businesses?.name ?? '-'}`
-).join('\n')}
+Todas las transacciones (${txs.length}, de más reciente a más antigua):
+${txs.map(t => {
+  const arsAmt = toARS(t)
+  const currencyTag = t.currency === 'USD' ? ` (USD ${Number(t.amount).toLocaleString('es-AR')} × TC ${t.exchange_rate ?? fallbackRate})` : ''
+  return `  ${t.date} | ${t.description} | ${fmt(arsAmt)}${currencyTag} | ${t.type === 'income' ? 'ingreso' : 'gasto'} | ${t.status === 'percibido' ? (t.type === 'income' ? 'cobrado' : 'pagado') : 'pendiente'} | ${t.categories?.name ?? '-'} | ${t.businesses?.name ?? '-'}`
+}).join('\n')}
 `
 
     const systemPrompt = `Sos un asistente financiero inteligente para "Grupo Lubrano", un sistema de gestión financiera familiar argentino.
@@ -143,8 +152,8 @@ ${dataCtx}`
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 600,
+        model: 'claude-haiku-4-5',
+        max_tokens: 1024,
         system: systemPrompt,
         messages: messages.slice(-10).map((m: { role: string; content: string }) => ({
           role: m.role,
